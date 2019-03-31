@@ -96,6 +96,7 @@ init () {
 
 	create-intermediate || return 1
 
+	echo
 	echoc 'Creating certificate chain' green
 	cat $INTRMDT_CERT $ROOT_CERT > $CA_CHAIN && \
 	chmod 444 $CA_CHAIN || { echoc 'Could not create certificate chain' red 1>&2; return 1; }
@@ -105,7 +106,6 @@ init () {
 	generate-ocsp -rootca || exit 1
 	generate-ocsp || exit 1
 
-	echo
 	echo
 	echoc 'The following configuration files were created:' green
 	echoc "Root CA: $ROOT_CONF" | indent
@@ -207,7 +207,7 @@ create-intermediate () {
 	echoc "Successfully created the following files" greenbold
 	echo "Key: $INTRMDT_KEY" | indent
 	echo "Certificate: $INTRMDT_CERT" | indent
-	if [[ -n "$INTRMDT_CRL" ]]; then
+	if [[ -n "$INTRMDT_CRL_DP" ]]; then
 		echo "CRL: $INTRMDT_CRL" | indent
 	fi
 }
