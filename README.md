@@ -61,5 +61,6 @@ OCSP signing keys are automatically generated during initialization if either or
 
 
 ## Examples
-[`spki init`](https://asciinema.org/a/237874)
-[`spki create, spki list, spki list-crl, spki revoke`](https://asciinema.org/a/237953)
+* [`spki init`](https://asciinema.org/a/237874)
+
+* [`spki create, spki list, spki list-crl, spki revoke`](https://asciinema.org/a/237953)
