@@ -4,7 +4,8 @@
 # Based on https://jamielinux.com/docs/openssl-certificate-authority/
 #
 # Revision History:
-# 	2019-03-21	0.9		Created
+#	2019-04-02  0.9.1	Improved password handling
+# 	2019-03-21	0.9.0	Created
 #
 
 #############
@@ -55,27 +56,30 @@ init () {
 	if [ -d "$ROOT_DIR" ]; then
 		echoc "The root CA directory '$ROOT_DIR' already exists." yellow | indent
 		confirm "Are you sure you want to overwrite its contents" || exit 0
-		rm -rf "$ROOT_DIR"
+		rm -rf "$ROOT_DIR" >& /dev/null || { echoc "Could not remove $ROOT_DIR" red 1>&2; return 1; }
 	fi
 	mkdir -p "$ROOT_DIR" >& /dev/null || { echoc "Could not create '$ROOT_DIR'" red 1>&2; return 1; }
 
 	echoc 'Preparing root directory' green
-	prep_directory "$ROOT_DIR" || return 1
-
-	get_default_fields
+	prep-directory "$ROOT_DIR" || return 1
+	get-default-fields
 
 	echoc 'Writing root configuration file' green
 	write_root_conf || return 1
 
 	echoc 'Creating root CA private key' green
-	openssl genrsa -aes256 -out $ROOT_KEY 4096 && \
+	ROOT_PASS=$(get-password 'root CA private key')
+	exec 3<<<"$ROOT_PASS"
+	openssl genrsa -aes256 -out $ROOT_KEY -passout "fd:3" 4096 |& indent && \
 	chmod 400 $ROOT_KEY || { echoc 'Could not create root CA key' red 1>&2; return 1; }
 
 	echoc 'Creating root CA certificate' green
+	
+	exec 3<<<"$ROOT_PASS"
 	openssl req -config $ROOT_CONF \
 		-key $ROOT_KEY \
 		-new -x509 -days 7300 -sha256 -extensions v3_ca \
-		-out $ROOT_CERT && \
+		-out $ROOT_CERT -passin "fd:3" && \
 	chmod 444 $ROOT_CERT || { echoc 'Could not create root CA certificate' red 1>&2; return 1; }
 
 	echoc 'Verifying root CA cert' green
@@ -90,7 +94,7 @@ init () {
 		mkdir -p $INTRMDT_DIR >& /dev/null || { echoc "Could not create '$INTRMDT_DIR'" red 1>&2; return 1; }
 	fi
 	echoc 'Preparing intermediate CA directory' green
-	prep_directory $INTRMDT_DIR || exit 1
+	prep-directory $INTRMDT_DIR || exit 1
 	echoc 'Writing intermediate CA configuration file' green
 	write_intermediate_conf || return 1
 
@@ -157,16 +161,19 @@ create () {
 	CSR="$INTRMDT_DIR/csr/$PREFIX.csr.pem"
 	CERT="$INTRMDT_DIR/certs/$PREFIX.cert.pem"
 	echoc 'Creating private key' green
+	PASS=$(generate-password 'private key')
+	exec 3<<<"$PASS"
 	if [[ -z "$CERT_ENCRYPTION" ]]; then
-		openssl genrsa -out $KEY 2048
+		openssl genrsa -out $KEY -passout fd:3 2048 | indent
 	else
-		openssl genrsa -"$CERT_ENCRYPTION" -out $KEY 2048
+		openssl genrsa -"$CERT_ENCRYPTION" -out $KEY -passout fd:3 2048
 	fi && \
 	chmod 400 $KEY && \
-	echoc 'Creating CSR' green && \
+	echoc 'Creating CSR' green
+	exec 3<<<"$PASS"
 	openssl req -config $INTRMDT_CONF \
 		-key $KEY \
-		-new -sha256 -out $CSR && \
+		-new -sha256 -out $CSR -passin fd:3 && \
 	sign $1 $CSR $CERT || { echoc 'Could not create certificate' red 1>&2; return 1; }
 	echo
 	echoc "Successfully created the following files" greenbold
@@ -177,19 +184,26 @@ create () {
 create-intermediate () {
 	# https://jamielinux.com/docs/openssl-certificate-authority/create-the-intermediate-pair.html
 	echoc 'Creating intermediate CA private key' green
-	openssl genrsa -aes256 -out $INTRMDT_KEY 4096 && \
+	INTRMDT_PASS=$(get-password 'intermediate CA private key')
+	exec 3<<<"$INTRMDT_PASS"
+	openssl genrsa -aes256 -out $INTRMDT_KEY -passout "fd:3" 4096 |& indent && \
 	chmod 400 $INTRMDT_KEY || { echoc 'Could not create intermediate CA private key' red 1>&2; return 1; }
 
+	exec 3<<<"$INTRMDT_PASS"
 	echoc 'Creating intermediate CA CSR' green && \
 	openssl req -config $INTRMDT_CONF -new -sha256 \
 		-key $INTRMDT_KEY \
-		-out $INTRMDT_CSR || { echoc 'Could not create intermediate CA CSR' red 1>&2; return 1; }
+		-out $INTRMDT_CSR -passin "fd:3" || { echoc 'Could not create intermediate CA CSR' red 1>&2; return 1; }
 
+	if [[ -n "$ROOT_PASS" ]]; then
+		exec 3<<<"$ROOT_PASS"
+		PASS_ARGS=(-passin "fd:3")
+	fi
 	echoc 'Signing intermediate CA CSR' green && \
 	openssl ca -config $ROOT_CONF -extensions v3_intermediate_ca \
 		-days 3650 -notext -md sha256 \
 		-in $INTRMDT_CSR \
-		-out $INTRMDT_CERT && \
+		-out $INTRMDT_CERT ${PASS_ARGS[*]} && \
 	chmod 444 $INTRMDT_CERT || { echoc 'Could not sign intermediate CA CSR' red 1>&2; return 1; }
 
 	echoc 'Verifying intermediate CA cert' green
@@ -334,13 +348,18 @@ generate-crl () {
 	if [[ "$1" == "-rootca" ]]; then 
 		if [[ -n "$ROOT_CRL_DP" ]]; then
 			echoc 'Generating root CRL' green
+			if [[ -n "$ROOT_PASS" ]]; then
+				exec 3<<<"$ROOT_PASS"
+				PASS_ARGS=(-passin "fd:3")
+			fi
 			openssl ca -config $ROOT_CONF \
-				-gencrl -out ${ROOT_CRL/der/pem} || { echoc 'Could not create root CRL' red 1>&2; return 1; }
+				-gencrl -out ${ROOT_CRL/der/pem} \
+				${PASS_ARGS[*]} |& indent || { echoc 'Could not create root CRL' red 1>&2; return 1; }
 
 			echoc 'Converting to DER' green
 			openssl crl -in ${ROOT_CRL/der/pem} \
 				-outform DER -out $ROOT_CRL && \
-			rm ${ROOT_CRL/der/pem}  || { echoc 'Could not convert to DER' red 1>&2; return 1; }
+			rm ${ROOT_CRL/der/pem} || { echoc 'Could not convert to DER' red 1>&2; return 1; }
 
 			echoc 'Verifying root CA CRL' green
 			openssl crl -inform DER -in $ROOT_CRL -noout -text | remove_openssl_hex | indent
@@ -349,15 +368,20 @@ generate-crl () {
 		fi
 	elif [[ -n "$INTRMDT_CRL_DP" ]]; then
 		echoc 'Generating intermediate CRL' green
+		if [[ -n "$INTRMDT_PASS" ]]; then
+			exec 3<<<"$INTRMDT_PASS"
+			PASS_ARGS=(-passin "fd:3")
+		fi
 		openssl ca -config $INTRMDT_CONF \
-			-gencrl -out  ${INTRMDT_CRL/der/pem} || { echoc 'Could not create intermediate CRL' red 1>&2; return 1; }
+			-gencrl -out ${INTRMDT_CRL/der/pem} \
+			${PASS_ARGS[*]} | indent || { echoc 'Could not create intermediate CRL' red 1>&2; return 1; }
 
 		echoc 'Converting to DER' green
 			openssl crl -in ${INTRMDT_CRL/der/pem} \
 				-outform DER -out $INTRMDT_CRL && \
 			rm ${INTRMDT_CRL/der/pem}  || { echoc 'Could not convert to DER' red 1>&2; return 1; }
 
-		echoc 'Verifying intermediate CRL'
+		echoc 'Verifying intermediate CRL' green
 		openssl crl -inform DER -in $INTRMDT_CRL -noout -text | remove_openssl_hex | indent
 		echoc 'Press any key to continue...' yellow | indent
 		read -n1 -r -s
@@ -369,19 +393,27 @@ generate-ocsp () {
 	if [[ "$1" == "-rootca" ]]; then
 		if [[ -n "$ROOT_OCSP" ]]; then
 			echoc 'Generating root OCSP key' green
+			ROOT_OCSP_PASS=$(get-password 'root OCSP private key')
+			exec 3<<<"$ROOT_OCSP_PASS"
 			openssl genrsa -aes256 \
-				-out $ROOT_OCSP_KEY 4096 || { echoc 'Could not create root OCSP key' 1>&2; return 1; }
+				-out $ROOT_OCSP_KEY -passout "fd:3" 4096 |& indent || { echoc 'Could not create root OCSP key' 1>&2; return 1; }
 
 			echoc 'Generating root OCSP CSR' green
+			exec 3<<<"$ROOT_OCSP_PASS"
 			openssl req -config $ROOT_CONF -new -sha256 \
 				-key $ROOT_OCSP_KEY \
-				-out $ROOT_OCSP_CSR || { echoc 'Could not create root OCSP CSR' red 1>&2; return 1; }
+				-out $ROOT_OCSP_CSR -passin "fd:3" || { echoc 'Could not create root OCSP CSR' red 1>&2; return 1; }
 
 			echoc 'Signing root OCSP certificate' green
+
+			if [[ -n "$ROOT_PASS" ]]; then
+				exec 3<<<"$ROOT_PASS"
+				PASS_ARGS=(-passin "fd:3")
+			fi
 			openssl ca -config $ROOT_CONF \
 				-extensions ocsp -days 375 -notext -md sha256 \
 				-in $ROOT_OCSP_CSR \
-				-out $ROOT_OCSP_CERT || { echoc 'Could not sign root OCSP certificate' red 1>&2; return 1; } 
+				-out $ROOT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign root OCSP certificate' red 1>&2; return 1; } 
 
 			echoc 'Verifying root OCSP certificate' green
 			openssl x509 -in $ROOT_OCSP_CERT -noout -text | remove_openssl_hex | indent
@@ -390,19 +422,26 @@ generate-ocsp () {
 		fi
 	elif [[ -n "$INTRMDT_OCSP" ]]; then
 		echoc 'Generating intermediate OCSP key' green
+		INTRMDT_OCSP_PASS=$(get-password 'intermediate OCSP private key')
+		exec 3<<<"$INTRMDT_OCSP_PASS"
 		openssl genrsa -aes256 \
-			-out $INTRMDT_OCSP_KEY 4096 || { echoc 'Could not create intermediate OCSP key' 1>&2; return 1; }
+			-out $INTRMDT_OCSP_KEY -passout "fd:3" 4096 |& indent || { echoc 'Could not create intermediate OCSP key' 1>&2; return 1; }
 
+		exec 3<<<"$INTRMDT_OCSP_PASS"
 		echoc 'Generating intermediate OCSP CSR' green
 		openssl req -config $INTRMDT_CONF -new -sha256 \
 			-key $INTRMDT_OCSP_KEY \
-			-out $INTRMDT_OCSP_CSR || { echoc 'Could not create intermediate OCSP CSR' red 1>&2; return 1; }
+			-out $INTRMDT_OCSP_CSR -passin "fd:3" || { echoc 'Could not create intermediate OCSP CSR' red 1>&2; return 1; }
 
 		echoc 'Signing intermediate OCSP certificate' green
+		if [[ -n "$INTRMDT_PASS" ]]; then
+			exec 3<<<"$INTRMDT_PASS"
+			PASS_ARGS=(-passin "fd:3")
+		fi
 		openssl ca -config $INTRMDT_CONF \
 			-extensions ocsp -days 375 -notext -md sha256 \
 			-in $INTRMDT_OCSP_CSR \
-			-out $INTRMDT_OCSP_CERT || { echoc 'Could not sign intermediate OCSP certificate' red 1>&2; return 1; } 
+			-out $INTRMDT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign intermediate OCSP certificate' red 1>&2; return 1; } 
 
 		echoc 'Verifying intermediate OCSP certificate' green
 		openssl x509 -in $INTRMDT_OCSP_CERT -noout -text | remove_openssl_hex | indent
@@ -440,7 +479,29 @@ ocsp-query () {
       -cert $4  | remove_openssl_hex | indent || { echoc "Could not complete OCSP query" red 1>&2; return 1; }
 }
 
-prep_directory () {
+get-password () {
+	PASS=0
+	PASSV=1
+	while [[ "$PASS" != "$PASSV" ]]; do
+		echo -ne '\t' 1>&2
+		read -s -r -p "Enter $1 pass phrase:" PASS
+		if (( ${#PASS} < 4 )); then
+			echo -ne '\n\t' 1>&2
+			echoc 'Pass phrase must be at least 4 characters' red 1>&2
+			continue
+		fi
+		echo -ne '\n\t' 1>&2
+		read -s -r -p "Verifying - Enter $1 pass phrase:" PASSV
+		if [[ "$PASS" != "$PASSV" ]]; then
+			echo 1>&2
+			echoc 'Pass phrases did not match' red | indent 1>&2
+		fi
+		echo 1>&2
+	done
+	echo -n "$PASS"
+}
+
+prep-directory () {
 	for dir in certs crl csr newcerts private; do
 		if [ ! -d $1/$dir ]; then
 			mkdir $1/$dir >& /dev/null || { echoc "Could not create $1/$dir" red 1>&2; return 1; }
@@ -456,7 +517,7 @@ prep_directory () {
 	} 2> /dev/null || { echoc 'Could not create files' red 1>&2; return 1; }
 }
 
-get_default_fields() {
+get-default-fields() {
 	echoc 'Please enter defaults for the following fields:' green
 	echoc 'Enter "." to disable prompting of the field' yellow | indent
 	echoc 'Leave it blank to prompt without a default' yellow | indent
