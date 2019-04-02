@@ -305,12 +305,12 @@ revoke () {
 		return 1
 	fi
 	if [[ -n "$2" ]]; then
-		openssl ca -config $INTRMDT_CONF \
-			-revoke "$1" -crl_reason "$2" || { echoc "Could not revoke $1" 1>2; return 1; }
-	else
-		openssl ca -config $INTRMDT_CONF \
-			-revoke "$1" || { echoc "Could not revoke $1" 1>2; return 1; }
+		REASON_ARGS=(-crl_Reason "$2")
 	fi
+		INTRMDT_PASS=$(get-password 'intermediate CA private key' -noverify)
+		exec 3<<<"$INTRMDT_PASS"
+		openssl ca -config $INTRMDT_CONF \
+			-revoke "$1" -passin fd:3 ${REASON_ARGS[*]} || { echoc "Could not revoke $1" 1>2; return 1; }
 	generate-crl || return 1
 	echo
 	echoc "Successfully revoked $1" greenbold
@@ -490,14 +490,20 @@ get-password () {
 	PASSV=1
 	while [[ "$PASS" != "$PASSV" ]]; do
 		echo -ne '\t' 1>&2
-		read -s -r -p "Enter $1 pass phrase:" PASS
+		echo -ne "\e[33mEnter $1 pass phrase:\e[0;0m" 1>&2
+		read -s -r PASS
 		if (( ${#PASS} < 4 )); then
 			echo -ne '\n\t' 1>&2
 			echoc 'Pass phrase must be at least 4 characters' red 1>&2
 			continue
 		fi
+		if [[ "$2" == "-noverify" ]]; then
+			echo 1>&2
+			break;
+		fi
 		echo -ne '\n\t' 1>&2
-		read -s -r -p "Verifying - Enter $1 pass phrase:" PASSV
+		echo -ne "\e[33mVerifying - Enter $1 pass phrase:\e[0;0m" 1>&2
+		read -s -r PASSV
 		if [[ "$PASS" != "$PASSV" ]]; then
 			echo 1>&2
 			echoc 'Pass phrases did not match' red | indent 1>&2
