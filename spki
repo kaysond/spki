@@ -291,7 +291,10 @@ list () {
 			if ($1 == "R") print "\tStatus: Revoked";
 			if ($1 == "E") print "\tStatus: Expired";
 			print "\tExpires: 20"substr($2,0,2)"-"substr($2,3,2)"-"substr($2,5,2)" "substr($2,7,2)":"substr($2,9,2)":"substr($2,11,2)" UTC";
-			if ($1 == "R") print "\tRevoked: 20"substr($3,0,2)"-"substr($3,3,2)"-"substr($3,5,2)" "substr($3,7,2)":"substr($3,9,2)":"substr($3,11,2) " UTC";
+			if ($1 == "R") {
+				print "\tRevoked: 20"substr($3,0,2)"-"substr($3,3,2)"-"substr($3,5,2)" "substr($3,7,2)":"substr($3,9,2)":"substr($3,11,2) " UTC";
+				print "\tRevocation reason: "substr($3,15);
+			}
 			print "\tSerial: "$4,"\n";
 		}' \
 		$INTRMDT_DIR/index.txt
