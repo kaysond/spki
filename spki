@@ -19,8 +19,8 @@ INTRMDT_PREFIX='intermediate'
 
 CLIENT_ENCRYPTION='aes256'
 
-ROOT_CRL_DP=''
-INTRMDT_CRL_DP=''
+ROOT_CRL_DP='URI:http://localhost:81/root.crl'
+INTRMDT_CRL_DP='URI:http://localhost:81/intermediate.crl'
 
 ROOT_OCSP=''
 INTRMDT_OCSP=''
@@ -65,7 +65,7 @@ init () {
 	get-default-fields
 
 	echoc 'Writing root configuration file' green
-	write_root_conf || return 1
+	write-root-conf || return 1
 
 	echoc 'Creating root CA private key' green
 	ROOT_PASS=$(get-password 'root CA private key')
@@ -96,7 +96,7 @@ init () {
 	echoc 'Preparing intermediate CA directory' green
 	prep-directory $INTRMDT_DIR || exit 1
 	echoc 'Writing intermediate CA configuration file' green
-	write_intermediate_conf || return 1
+	write-intermediate-conf || return 1
 
 	create-intermediate || return 1
 
@@ -479,6 +479,12 @@ ocsp-query () {
       -cert $4  | remove_openssl_hex | indent || { echoc "Could not complete OCSP query" red 1>&2; return 1; }
 }
 
+update-config () {
+	get-default-fields
+	write-root-conf || return 1
+	write-intermediate-conf || return 1
+}
+
 get-password () {
 	PASS=0
 	PASSV=1
@@ -567,7 +573,7 @@ get-default-fields() {
 	done
 }
 
-write_root_conf () {
+write-root-conf () {
 	touch $ROOT_CONF >& /dev/null
 	if [ ! -w $ROOT_CONF ]; then
 		echoc "Could not write '$ROOT_CONF'" 1>&2
@@ -701,7 +707,7 @@ write_root_conf () {
 	extendedKeyUsage = critical, OCSPSigning
 	EOF
 }
-write_intermediate_conf () {
+write-intermediate-conf () {
 	touch $INTRMDT_CONF >& /dev/null
 	if [ ! -w $INTRMDT_CONF ]; then
 		echoc "Could not write $INTRMDT_CONF"
@@ -936,6 +942,7 @@ print_help () {
 		echo '  spki generate-ocsp [-rootca]'
 		echo '  spki ocsp-responder <port> [-rootca]'
 		echo '  spki ocsp-query <url> (certificate | file-prefix) [-rootca]'
+		echo '  spki update-config'
 }
 COMMAND=$1
 shift
@@ -1016,6 +1023,10 @@ case "$COMMAND" in
 		else
 			ocsp-query $CA_CHAIN "$1" $INTRMDT_CERT $CERT || exit 1
 		fi
+	;;
+	'update-config')
+		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
+		update-config || exit 1
 	;;
 	*)
 		print_help

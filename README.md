@@ -58,6 +58,7 @@ OCSP signing keys are automatically generated during initialization if either or
 * `spki generate-ocsp [-rootca]` - Generate the Intermediate OCSP signing pair. Pass `-rootca` to generate the Root OCSP signing pair
 * `spki ocsp-responder <port> [-rootca]` - Start an OCSP responder on the specified port using `openssl ocsp`. The command by default uses the Intermediate CA database, but can be changed to the Root CA database by passing `-rootca`. This can be turned into a service by using `systemd`, for example. The OpenSSL OCSP responder may not be suitable for high traffic.
 * `spki ocsp-query <url> (certificate | file-prefix) [-rootca]` - Send an OCSP query for the specified certificate to the specified url (e.g. `http://127.0.0.1:12345`. The command uses the full chain file by default, suitable for verifying certificates signed by the Intermediate CA. Specify `-rootca` to use just the Root CA, suitable for verifying the Intermediate CA certificate.
+* `spki update-config` - Regenerate the openssl configuration files. This allows the configuration variables, such as CRL or OCSP to be updated. It re-prompts for the certificate defaults.
 
 
 ## Examples
