@@ -164,7 +164,7 @@ create () {
 	PASS=$(get-password 'private key')
 	exec 3<<<"$PASS"
 	if [[ -z "$CERT_ENCRYPTION" ]]; then
-		openssl genrsa -out $KEY -passout fd:3 2048 | indent
+		openssl genrsa -out $KEY -passout fd:3 2048 |& indent
 	else
 		openssl genrsa -"$CERT_ENCRYPTION" -out $KEY -passout fd:3 2048
 	fi && \
