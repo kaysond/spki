@@ -166,7 +166,7 @@ create () {
 	if [[ -z "$CERT_ENCRYPTION" ]]; then
 		openssl genrsa -out $KEY -passout fd:3 2048 |& indent
 	else
-		openssl genrsa -"$CERT_ENCRYPTION" -out $KEY -passout fd:3 2048
+		openssl genrsa -"$CERT_ENCRYPTION" -out $KEY -passout fd:3 2048 |& indent
 	fi && \
 	chmod 400 $KEY && \
 	echoc 'Creating CSR' green
@@ -455,22 +455,27 @@ generate-ocsp () {
 
 ocsp-responder () {
 	# https://jamielinux.com/docs/openssl-certificate-authority/online-certificate-status-protocol.html
-	if [[ "$2" == "-rootca" ]]; then
-		CA=$ROOT_CERT
-		INDEX="$ROOT_DIR"/index.txt
-		RKEY=$ROOT_OCSP_KEY
-		RCERT=$ROOT_OCSP_CERT
+	if [[ -n "$ROOT_OCSP" || -n "$INTRMDT_OCSP" ]]; then
+		if [[ "$2" == "-rootca" ]]; then
+			CA=$ROOT_CERT
+			INDEX="$ROOT_DIR"/index.txt
+			RKEY=$ROOT_OCSP_KEY
+			RCERT=$ROOT_OCSP_CERT
+		else
+			CA=$CA_CHAIN
+			INDEX=$INTRMDT_DIR/index.txt
+			RKEY=$INTRMDT_OCSP_KEY
+			RCERT=$INTRMDT_OCSP_CERT
+		fi
+		openssl ocsp -port $1 -text \
+			-index $INDEX \
+			-CA $CA \
+			-rkey $RKEY \
+			-rsigner $RCERT || { echoc 'Could not start OCSP responder' red 1>&2; return 1; }
 	else
-		CA=$CA_CHAIN
-		INDEX=$INTRMDT_DIR/index.txt
-		RKEY=$INTRMDT_OCSP_KEY
-		RCERT=$INTRMDT_OCSP_CERT
+		echoc 'OCSP is not configured' red 1>&2
+		return 1
 	fi
-	openssl ocsp -port $1 -text \
-		-index $INDEX \
-		-CA $CA \
-		-rkey $RKEY \
-		-rsigner $RCERT || { echoc 'Could not start OCSP responder' red 1>&2; return 1; }
 }
 
 ocsp-query () {
@@ -874,6 +879,14 @@ check-spki-integrity () {
 	fi
 	if [[ -n "$ROOT_CRL_DP" && ! -r $ROOT_CRL ]]; then
 		echoc "Could not find $ROOT_CRL" 1>&2
+		return 1
+	fi
+	if [[ -n "$INTRMDT_OCSP" && ! -r "$INTRMDT_OCSP_KEY" ]]; then
+		echoc "Could not find $INTRMDT_OCSP_KEY" 1>&2
+		return 1
+	fi
+	if [[ -n "$ROOT_OCSP" && ! -r "$ROOT_OCSP_KEY" ]]; then
+		echoc "Could not find $ROOT_OCSP_KEY" 1>&2
 		return 1
 	fi
 	if [[ "$1" == "-rootca" && ! -r $ROOT_KEY ]]; then
