@@ -19,8 +19,8 @@ INTRMDT_PREFIX='intermediate'
 
 CLIENT_ENCRYPTION='aes256'
 
-ROOT_CRL_DP='URI:http://localhost:81/root.crl'
-INTRMDT_CRL_DP='URI:http://localhost:81/intermediate.crl'
+ROOT_CRL_DP=''
+INTRMDT_CRL_DP=''
 
 ROOT_OCSP=''
 INTRMDT_OCSP=''
@@ -491,6 +491,18 @@ update-config () {
 	get-default-fields
 	write-root-conf || return 1
 	write-intermediate-conf || return 1
+	if [[ -n "$ROOT_CRL" ]]; then
+		generate-crl -rootca || return 1
+	fi
+	if [[ -n "$INTRMDT_CRL" ]]; then
+		generate-crl || return 1
+	fi
+	if [[ -n "$ROOT_OCSP" ]]; then
+		generate-ocsp -rootca || return 1
+	fi
+	if [[ -n "$INTRMDT_OCSP" ]]; then
+		generate-ocsp || return 1
+	fi
 }
 
 get-password () {
@@ -860,37 +872,37 @@ write-intermediate-conf () {
 
 check-spki-integrity () {
 	if [ ! -d "$ROOT_DIR" ]; then
-		echoc "Could not read $ROOT_DIR" 1>&2
+		echoc "Could not read $ROOT_DIR" yellow 1>&2
 		return 1
 	fi
 	if [ ! -d "$INTRMDT_DIR" ]; then
-		echoc "Could not read $INTRMDT_DIR" 1>&2
+		echoc "Could not read $INTRMDT_DIR" yellow 1>&2
 		return 1
 	fi
 	for i in $ROOT_CONF $ROOT_CERT $INTRMDT_CONF $INTRMDT_KEY $INTRMDT_CERT $CA_CHAIN; do
 		if [ ! -r $i ]; then
-			echoc "Could not read $i" 1>&2
+			echoc "Could not read $i" yellow 1>&2
 			return 1
 		fi
 	done
 	if [[ -n "$INTRMDT_CRL_DP" && ! -r $INTRMDT_CRL ]]; then
-		echoc "Could not find $INTRMDT_CRL" 1>&2
+		echoc "Could not read $INTRMDT_CRL" yellow 1>&2
 		return 1
 	fi
 	if [[ -n "$ROOT_CRL_DP" && ! -r $ROOT_CRL ]]; then
-		echoc "Could not find $ROOT_CRL" 1>&2
+		echoc "Could not read $ROOT_CRL" yellow 1>&2
 		return 1
 	fi
 	if [[ -n "$INTRMDT_OCSP" && ! -r "$INTRMDT_OCSP_KEY" ]]; then
-		echoc "Could not find $INTRMDT_OCSP_KEY" 1>&2
+		echoc "Could not read $INTRMDT_OCSP_KEY" yellow 1>&2
 		return 1
 	fi
 	if [[ -n "$ROOT_OCSP" && ! -r "$ROOT_OCSP_KEY" ]]; then
-		echoc "Could not find $ROOT_OCSP_KEY" 1>&2
+		echoc "Could not read $ROOT_OCSP_KEY" yellow 1>&2
 		return 1
 	fi
 	if [[ "$1" == "-rootca" && ! -r $ROOT_KEY ]]; then
-		echoc "Could not find $ROOT_KEY" 1>&2
+		echoc "Could not read $ROOT_KEY" yellow 1>&2
 		return 1
 	fi
 }
@@ -1047,7 +1059,6 @@ case "$COMMAND" in
 		fi
 	;;
 	'update-config')
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
 		update-config || exit 1
 	;;
 	*)
