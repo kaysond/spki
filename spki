@@ -76,7 +76,7 @@ init () {
 	echoc 'Creating root CA certificate' green
 	
 	exec 3<<<"$ROOT_PASS"
-	openssl req -config $ROOT_CONF \
+	openssl req -verbose -config $ROOT_CONF \
 		-key $ROOT_KEY \
 		-new -x509 -days 7300 -sha256 -extensions v3_ca \
 		-out $ROOT_CERT -passin "fd:3" && \
@@ -171,9 +171,16 @@ create () {
 	chmod 400 $KEY && \
 	echoc 'Creating CSR' green
 	exec 3<<<"$PASS"
-	openssl req -config $INTRMDT_CONF \
-		-key $KEY \
-		-new -sha256 -out $CSR -passin fd:3 && \
+	if [[ "$3" == "-SAN" ]]; then
+		openssl req -verbose -reqexts SAN -config <(cat $INTRMDT_CONF \
+        	<(printf "\n[SAN]\nsubjectAltName=$4")) \
+			-key $KEY \
+			-new -sha256 -out $CSR -passin fd:3
+	else
+		openssl req -config $INTRMDT_CONF \
+			-key $KEY \
+			-new -sha256 -out $CSR -passin fd:3
+	fi && \
 	sign $1 $CSR $CERT || { echoc 'Could not create certificate' red 1>&2; return 1; }
 	echo
 	echoc "Successfully created the following files" greenbold
@@ -191,7 +198,7 @@ create-intermediate () {
 
 	exec 3<<<"$INTRMDT_PASS"
 	echoc 'Creating intermediate CA CSR' green && \
-	openssl req -config $INTRMDT_CONF -new -sha256 \
+	openssl req -verbose -config $INTRMDT_CONF -new -sha256 \
 		-key $INTRMDT_KEY \
 		-out $INTRMDT_CSR -passin "fd:3" || { echoc 'Could not create intermediate CA CSR' red 1>&2; return 1; }
 
@@ -236,7 +243,7 @@ sign () {
 	CSR="$2"
 	CERT="$3"
 	echoc 'Signing certificate' green
-	openssl ca -config $INTRMDT_CONF \
+	openssl ca -verbose -config $INTRMDT_CONF \
 		-extensions $EXT -days 375 -notext -md sha256 \
 		-in $CSR \
 		-out $CERT && \
@@ -648,6 +655,7 @@ write-root-conf () {
 	default_days      = 375
 	preserve          = no
 	policy            = policy_strict
+	copy_extensions	  = copy
 
 	[ policy_strict ]
 	# The root CA should only sign intermediate certificates that match.
@@ -782,6 +790,7 @@ write-intermediate-conf () {
 	default_days      = 375
 	preserve          = no
 	policy            = policy_loose
+	copy_extensions	  = copy
 
 	[ policy_strict ]
 	# The root CA should only sign intermediate certificates that match.
@@ -965,7 +974,7 @@ indent () {
 print_help () {
 		echo 'Usage:'
 		echo '  spki init'
-		echo '  spki create (server | user) <file-prefix>'
+		echo '  spki create (server | user) <file-prefix> [-SAN <subjectAltName>]'
 		echo '  spki create-intermediate'
 		echo '  spki sign (server | user) <CSR> <certificate>'
 		echo '  spki list'
@@ -987,19 +996,19 @@ case "$COMMAND" in
 		init || exit 1
 	;;
 	'create')
-		if [[ $# -ne 2 || ( "$1" != 'server' && "$1" != 'user' ) ]]; then
+		if [[ "$1" != 'server' && "$1" != 'user' || ( $# -eq 4 && "$3" != '-SAN' || -z "$4" ) || $# -lt 2 ]]; then
 			print_help
 			exit 1
 		fi
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		create $1 $2 || exit 1
+		create $@ || exit 1
 	;;
 	'create-intermediate')
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
 		create-intermediate || exit 1
 	;;
 	'sign')
-		if [[ $# -ne 2 || ( "$1" != 'server' && "$1" != 'user' ) ]]; then
+		if [[ $# -ne 3 || ( "$1" != 'server' && "$1" != 'user' ) ]]; then
 			print_help
 			exit 1
 		fi
