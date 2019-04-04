@@ -76,7 +76,7 @@ init () {
 	echoc 'Creating root CA certificate' green
 	
 	exec 3<<<"$ROOT_PASS"
-	openssl req -config $ROOT_CONF \
+	openssl req -verbose -config $ROOT_CONF \
 		-key $ROOT_KEY \
 		-new -x509 -days 7300 -sha256 -extensions v3_ca \
 		-out $ROOT_CERT -passin "fd:3" && \
@@ -198,7 +198,7 @@ create-intermediate () {
 
 	exec 3<<<"$INTRMDT_PASS"
 	echoc 'Creating intermediate CA CSR' green && \
-	openssl req -config $INTRMDT_CONF -new -sha256 \
+	openssl req -verbose -config $INTRMDT_CONF -new -sha256 \
 		-key $INTRMDT_KEY \
 		-out $INTRMDT_CSR -passin "fd:3" || { echoc 'Could not create intermediate CA CSR' red 1>&2; return 1; }
 
@@ -791,7 +791,7 @@ write-intermediate-conf () {
 	preserve          = no
 	policy            = policy_loose
 	copy_extensions	  = copy
-	
+
 	[ policy_strict ]
 	# The root CA should only sign intermediate certificates that match.
 	# See the POLICY FORMAT section of 'man ca'.
