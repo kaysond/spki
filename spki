@@ -12,7 +12,7 @@
 # Config
 #############
 
-ROOT_DIR='/root/ca_test'
+ROOT_DIR='/root/ca'
 
 ROOT_PREFIX='ca'
 INTRMDT_PREFIX='intermediate'
