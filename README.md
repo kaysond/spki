@@ -3,7 +3,7 @@
 
 The wrapper is based on Jamie Nguyen's guide: [OpenSSL Certificate Authority](https://jamielinux.com/docs/openssl-certificate-authority/ )
 ## Installation
-Copy `spki` to a location in your path.
+Copy `spki` to a location in your path. [Releases](https://github.com/kaysond/spki/releases) use [semantic versioning](https://semver.org/) to identify backwards-incompatible changes.
 
 ## Configuration
 The top of the script contains several configuration variables; the defaults correspond to the guide.
