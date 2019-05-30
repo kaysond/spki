@@ -589,7 +589,7 @@ get-default-fields() {
 			orgNames=($RESPONSE)
 			unset IFS
 			orgCount=0
-			for orgName in ${orgNames[@]}; do
+			for orgName in "${orgNames[@]}"; do
 				if [[ "$orgName" != '.' ]]; then
 					DEFAULT_FIELDS+=$'\n'"${orgCount}.organizationName = Organization Name $orgCount"
 					if [[ -n "$orgName" ]]; then
