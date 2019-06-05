@@ -4,6 +4,7 @@
 # Based on https://jamielinux.com/docs/openssl-certificate-authority/
 #
 # Revision History:
+#	2019-06-05	0.7.4	Intermediate CA CRL now defaults to 32 day expiry, Root to 4 year + 5 day
 #	2019-05-30	0.7.3	Bug fixes
 #	2019-05-07	0.7.2	Root CA CRL now defaults to 4 year expiry
 #	2019-04-05 	0.7.1	Bug fixes
@@ -142,7 +143,7 @@ init () {
 			echoc "Intermediate CA: $INTRMDT_CRL" | indent
 		fi
 		echo
-		echoc 'CRLs must be regenerated at regular intervals (default: 30 days). Use `spki generate-crl`' yellow | indent
+		echoc 'CRLs must be regenerated at regular intervals (Intermediate: 30 days, Root: 4 years). Use `spki generate-crl`' yellow | indent
 		echo
 	fi
 	if [[ -n "$ROOT_OCSP" || -n "$INTRMDT_OCSP" ]]; then
@@ -649,7 +650,7 @@ write-root-conf () {
 	crlnumber         = \$dir/crlnumber
 	crl               = \$dir/crl/$ROOT_PREFIX.crl.pem
 	crl_extensions    = crl_ext
-	default_crl_days  = 1460
+	default_crl_days  = 1465
 
 	# SHA-1 is deprecated, so use SHA-2 instead.
 	default_md        = sha256
@@ -784,7 +785,7 @@ write-intermediate-conf () {
 	crlnumber         = \$dir/crlnumber
 	crl               = \$dir/crl/$INTRMDT_PREFIX.crl.pem
 	crl_extensions    = crl_ext
-	default_crl_days  = 30
+	default_crl_days  = 32
 
 	# SHA-1 is deprecated, so use SHA-2 instead.
 	default_md        = sha256
