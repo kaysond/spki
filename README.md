@@ -6,7 +6,7 @@ The wrapper is based on Jamie Nguyen's guide: [OpenSSL Certificate Authority](ht
 Copy `spki` to a location in your path. [Releases](https://github.com/kaysond/spki/releases) use [semantic versioning](https://semver.org/) to identify backwards-incompatible changes.
 
 ## Configuration
-The top of the script contains several configuration variables; the defaults correspond to the guide.
+The top of the script contains several configuration variables; the defaults correspond to the guide. External configuration methods that do not require script modification are also supported (see below).
 
 `ROOT_DIR` - The base directory where all PKI files are stored
 
@@ -28,8 +28,24 @@ OCSP signing keys are automatically generated during initialization if either or
 
 `ROOT_OCSP` - Root CA OCSP Server (e.g. 'URI:http://ocsp.domain.com')
 
-
 `INTRMDT_OCSP`- Intermediate CA OCSP (e.g. 'URI:http://ocsp.domain.com')
+
+### External Configuration
+Configuration can be specified externally, without modifying the script, via environment variables. The precedence order of the configuration methods is:
+1. Configuration File
+2. Environment Variables
+3. In-script Variables
+
+#### Configuration File
+The configuration file can be specified in the environment variable `SPKI_CONFIG_FILE`. This file is loaded directly by bash and should contain a list of local variable definitions such as
+```
+ROOT_DIR=/root/ca
+ROOT_PREFIX=root
+```
+Note: If this file is loaded, all other environment variables are ignored.
+
+#### Environment Variables
+The variables in the script itself can be overriden by environment variables. The environment variable name should be those in the script but prefixed with `SPKI_` (e.g. `SPKI_ROOT_DIR` and `SPKI_ROOT_CRL_DP`).
 
 ## Usage
 * `spki init` - Initialize the PKI. This process first sets up the default Subject fields in the OpenSSL configuration files, then generates the Root CA, Intermediate CA, and a combined CA chain file. CRL's and OCSP certificates are also generated

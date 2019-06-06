@@ -4,6 +4,7 @@
 # Based on https://jamielinux.com/docs/openssl-certificate-authority/
 #
 # Revision History:
+#	2019-06-06	0.8.0	Added external configuration options
 #	2019-06-05	0.7.4	Intermediate CA CRL now defaults to 32 day expiry, Root to 4 year + 5 day
 #	2019-05-30	0.7.3	Bug fixes
 #	2019-05-07	0.7.2	Root CA CRL now defaults to 4 year expiry
@@ -33,6 +34,44 @@ INTRMDT_OCSP=''
 #############
 # End Config
 #############
+
+
+if [ -r "$SPKI_CONFIG_FILE" ]; then
+	. "$SPKI_CONFIG_FILE"
+else
+	if [ -n "$SPKI_ROOT_DIR" ]; then
+		ROOT_DIR="$SPKI_ROOT_DIR"
+	fi
+
+	if [ -n "$SPKI_ROOT_PREFIX" ]; then
+		ROOT_PREFIX="$SPKI_ROOT_PREFIX"
+	fi
+
+	if [ -n "$SPKI_INTRMDT_PREFIX" ]; then
+		INTRMDT_PREFIX="$SPKI_INTRMDT_PREFIX"
+	fi
+
+	if [ -n "$SPKI_CLIENT_ENCRYPTION" ]; then
+		CLIENT_ENCRYPTION="$SPKI_CLIENT_ENCRYPTION"
+	fi
+
+	if [ -n "$SPKI_ROOT_CRL_DP" ]; then
+		ROOT_CRL_DP="$SPKI_ROOT_CRL_DP"
+	fi
+
+	if [ -n "$SPKI_INTRMDT_CRL_DP" ]; then
+		INTRMDT_CRL_DP="$SPKI_INTRMDT_CRL_DP"
+	fi
+
+	if [ -n "$SPKI_ROOT_OCSP" ]; then
+		ROOT_OCSP="$SPKI_ROOT_OCSP"
+	fi
+
+	if [ -n "$SPKI_INTRMDT_OCSP" ]; then
+		INTRMDT_OCSP="$SPKI_INTRMDT_OCSP"
+	fi
+fi
+
 ROOT_CONF="$ROOT_DIR/openssl.cnf"
 ROOT_KEY="$ROOT_DIR/private/$ROOT_PREFIX.key.pem"
 ROOT_CERT="$ROOT_DIR/certs/$ROOT_PREFIX.cert.pem"
