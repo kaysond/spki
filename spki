@@ -118,7 +118,7 @@ init () {
 	chmod 400 $ROOT_KEY || { echoc 'Could not create root CA key' red 1>&2; return 1; }
 
 	echoc 'Creating root CA certificate' green
-	
+
 	exec 3<<<"$ROOT_PASS"
 	openssl req -verbose -config $ROOT_CONF \
 		-key $ROOT_KEY \
@@ -128,7 +128,7 @@ init () {
 
 	echoc 'Verifying root CA cert' green
 	openssl x509 -noout -text -in $ROOT_CERT | remove_openssl_hex | indent || { echoc 'Could not verify root CA certificate' red 1>&2; return 1; }
-		
+
 	echoc 'Press any key to continue...' yellow | indent
 	read -n1 -r -s
 
@@ -281,6 +281,8 @@ sign () {
 	# https://jamielinux.com/docs/openssl-certificate-authority/sign-server-and-client-certificates.html
 	if [[ "$1" == "server" ]]; then
 		EXT='server_cert'
+	elif [[ "$1" == "client_server" ]]; then
+	  EXT='client_server_cert'
 	else
 		EXT='usr_cert'
 	fi
@@ -318,6 +320,20 @@ verify () {
 	|| { echoc 'Could not verify certificate chain of trust' red 1>&2;  return 1; }
 }
 
+trustore () {
+	CERT=$INTRMDT_DIR/certs/ca-chain.cert.pem
+	TRUSTORE=$INTRMDT_DIR/certs/"$1"_trustore.p12
+	if [[ ! -r  $CERT ]]; then
+		echoc "Could not find '$1'" red 1>&2
+		return 1
+	else
+	  keytool -importcert -trustcacerts -storetype PKCS12 \
+	    -keystore $TRUSTORE  \
+      -alias ca -file $CA_CHAIN  -noprompt
+  fi
+  echoc "Created $TRUSTORE" greenbold
+}
+
 pkcs12 () {
 	KEY=$INTRMDT_DIR/private/"$1".key.pem
 	CERT=$INTRMDT_DIR/certs/"$1".cert.pem
@@ -326,7 +342,6 @@ pkcs12 () {
 		echoc "Could not find '$1'" red 1>&2
 		return 1
 	else
-		P12=$INTRMDT_DIR/certs/"$1".p12
 		openssl pkcs12 -export -out $P12  \
 			-inkey $KEY -in $CERT \
 			-certfile $CA_CHAIN && \
@@ -335,11 +350,11 @@ pkcs12 () {
 	fi
 	echoc "Created $P12" greenbold
 }
- 
+
 list () {
 	awk 'BEGIN { FS="\t" }
 		{
-			printf "\033[0;32m" $6 "\033[0m\n"; 
+			printf "\033[0;32m" $6 "\033[0m\n";
 			if ($1 == "V") print "\tStatus: Valid";
 			if ($1 == "R") print "\tStatus: Revoked";
 			if ($1 == "E") print "\tStatus: Expired";
@@ -401,7 +416,7 @@ list-crl () {
 generate-crl () {
 	# https://jamielinux.com/docs/openssl-certificate-authority/certificate-revocation-lists.html
 	# CRL formats changed to DER since that is expected by openssl verify
-	if [[ "$1" == "-rootca" ]]; then 
+	if [[ "$1" == "-rootca" ]]; then
 		if [[ -n "$ROOT_CRL_DP" ]]; then
 			echoc 'Generating root CRL' green
 			if [[ -n "$ROOT_PASS" ]]; then
@@ -469,7 +484,7 @@ generate-ocsp () {
 			openssl ca -config $ROOT_CONF \
 				-extensions ocsp -days 375 -notext -md sha256 \
 				-in $ROOT_OCSP_CSR \
-				-out $ROOT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign root OCSP certificate' red 1>&2; return 1; } 
+				-out $ROOT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign root OCSP certificate' red 1>&2; return 1; }
 
 			echoc 'Verifying root OCSP certificate' green
 			openssl x509 -in $ROOT_OCSP_CERT -noout -text | remove_openssl_hex | indent
@@ -497,7 +512,7 @@ generate-ocsp () {
 		openssl ca -config $INTRMDT_CONF \
 			-extensions ocsp -days 375 -notext -md sha256 \
 			-in $INTRMDT_OCSP_CSR \
-			-out $INTRMDT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign intermediate OCSP certificate' red 1>&2; return 1; } 
+			-out $INTRMDT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign intermediate OCSP certificate' red 1>&2; return 1; }
 
 		echoc 'Verifying intermediate OCSP certificate' green
 		openssl x509 -in $INTRMDT_OCSP_CERT -noout -text | remove_openssl_hex | indent
@@ -602,6 +617,17 @@ prep-directory () {
 	} 2> /dev/null || { echoc 'Could not create files' red 1>&2; return 1; }
 }
 
+get-from-env-or-read() {
+  NAME=$1
+  VALUE_FROM_ENV=${!NAME}
+  if [ ! -z "$VALUE_FROM_ENV" ]; then
+     echoc "$VALUE_FROM_ENV (from env property)" green
+     RESPONSE=$VALUE_FROM_ENV
+  else
+    read RESPONSE
+	fi
+}
+
 get-default-fields() {
 	echoc 'Please enter defaults for the following fields:' green
 	echoc 'Enter "." to disable prompting of the field' yellow | indent
@@ -624,8 +650,8 @@ get-default-fields() {
 		NAME=$i
 		DESC=${fieldMap[$i]}
 		if [[ $NAME == 'organizationName' ]]; then
-			echoc -n "Organization Names (organizationName), separated by ';':" yellow | indent
-			read RESPONSE
+			echoc -n "Organization Names (organizationName), separated by ';': " yellow | indent
+			get-from-env-or-read $NAME
 			IFS=';'
 			orgNames=($RESPONSE)
 			unset IFS
@@ -641,7 +667,7 @@ get-default-fields() {
 			done
 		else
 			echoc -n "$DESC ($NAME): " yellow | indent
-			read RESPONSE
+			get-from-env-or-read $NAME
 			if [[ "$RESPONSE" != '.' ]]; then
 				DEFAULT_FIELDS+=$'\n'"$NAME = $DESC"
 				if [[ -n "$RESPONSE" ]]; then
@@ -774,6 +800,17 @@ write-root-conf () {
 	keyUsage = critical, digitalSignature, keyEncipherment
 	extendedKeyUsage = serverAuth
 
+ [ client_server_cert ]
+	basicConstraints = CA:FALSE
+	nsCertType = client, server
+	nsComment = "OpenSSL Generated Server Certificate"
+	subjectKeyIdentifier = hash
+	authorityKeyIdentifier = keyid,issuer:always
+	keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+	extendedKeyUsage = clientAuth, serverAuth
+	$CRLLINE
+	$OCSPLINE
+	
 	[ crl_ext ]
 	# Extension for CRLs ('man x509v3_config').
 	authorityKeyIdentifier=keyid:always
@@ -911,6 +948,17 @@ write-intermediate-conf () {
 	$CRLLINE
 	$OCSPLINE
 
+ [ client_server_cert ]
+	basicConstraints = CA:FALSE
+	nsCertType = client, server
+	nsComment = "OpenSSL Generated Server Certificate"
+	subjectKeyIdentifier = hash
+	authorityKeyIdentifier = keyid,issuer:always
+	keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+	extendedKeyUsage = clientAuth, serverAuth
+	$CRLLINE
+	$OCSPLINE
+
 	[ crl_ext ]
 	# Extension for CRLs ('man x509v3_config').
 	authorityKeyIdentifier=keyid:always
@@ -1018,12 +1066,13 @@ indent () {
 print_help () {
 		echo 'Usage:'
 		echo '  spki init'
-		echo '  spki create (server | user) <file-prefix> [-SAN <subjectAltName>]'
+		echo '  spki create (server | user | client_server) <file-prefix> [-SAN <subjectAltName>]'
 		echo '  spki create-intermediate'
 		echo '  spki sign (server | user) <CSR> <certificate>'
 		echo '  spki list'
 		echo '  spki verify (certificate | file-prefix)'
 		echo '  spki export-pkcs12 <file-prefix>'
+		echo '  spki export-trustore <file-prefix>'
 		echo '  spki revoke (certificate | file-prefix)'
 		echo '  spki revoke-intermediate'
 		echo '  spki list-crl'
@@ -1040,7 +1089,7 @@ case "$COMMAND" in
 		init || exit 1
 	;;
 	'create')
-		if [[ "$1" != 'server' && "$1" != 'user' || ( $# -eq 4 && ( "$3" != '-SAN' || -z "$4" ) ) || $# -lt 2 ]]; then
+		if [[ "$1" != 'server' && "$1" != 'user' && "$1" != 'client_server' || ( $# -eq 4 && ( "$3" != '-SAN' || -z "$4" ) ) || $# -lt 2 ]]; then
 			print_help
 			exit 1
 		fi
@@ -1070,6 +1119,10 @@ case "$COMMAND" in
 	'export-pkcs12')
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
 		pkcs12 "$1" || exit 1
+	;;
+	'export-trustore')
+		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
+		trustore "$1" || exit 1
 	;;
 	'revoke')
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
