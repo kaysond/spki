@@ -289,10 +289,12 @@ sign () {
 	CSR="$2"
 	CERT="$3"
 	echoc 'Signing certificate' green
+	INTRMDT_PASS=$(get-password 'intermediate CA private key' -noverify)
+	exec 3<<<"$INTRMDT_PASS"
 	openssl ca -verbose -config $INTRMDT_CONF \
 		-extensions $EXT -days 375 -notext -md sha256 \
 		-in $CSR \
-		-out $CERT && \
+		-out $CERT -passin fd:3  && \
 	chmod 444 $CERT || { echoc 'Could not sign certificate' red 1>&2; return 1; }
 
 	verify $CERT || return 1;
@@ -320,18 +322,19 @@ verify () {
 	|| { echoc 'Could not verify certificate chain of trust' red 1>&2;  return 1; }
 }
 
-trustore () {
+truststore () {
 	CERT=$INTRMDT_DIR/certs/ca-chain.cert.pem
-	TRUSTORE=$INTRMDT_DIR/certs/"$1"_trustore.p12
+	TRUSTSTORE=$INTRMDT_DIR/certs/"$1"_truststore.p12
 	if [[ ! -r  $CERT ]]; then
 		echoc "Could not find '$1'" red 1>&2
 		return 1
 	else
+	  INTRMDT_PASS=$(get-password "truststore for $1" -noverify)
 	  keytool -importcert -trustcacerts -storetype PKCS12 \
-	    -keystore $TRUSTORE  \
-      -alias ca -file $CA_CHAIN  -noprompt
+	    -keystore $TRUSTSTORE  \
+      -alias ca -file $CA_CHAIN  -noprompt <<< `echo -ne ""$INTRMDT_PASS"\n"$INTRMDT_PASS""`
   fi
-  echoc "Created $TRUSTORE" greenbold
+  echoc "Created $TRUSTSTORE" greenbold
 }
 
 pkcs12 () {
@@ -342,8 +345,13 @@ pkcs12 () {
 		echoc "Could not find '$1'" red 1>&2
 		return 1
 	else
+	  INTRMDT_PASS=$(get-password "pkcs12 password for $1" -noverify)
+	  exec 3<<<"$INTRMDT_PASS"
+	  exec 4<<<"$INTRMDT_PASS"
 		openssl pkcs12 -export -out $P12  \
 			-inkey $KEY -in $CERT \
+			-passin fd:3 \
+			-passout fd:4 \
 			-certfile $CA_CHAIN && \
 		chmod 444 $P12 || { echoc 'Could not export to pkcs12'; return 1; }
 
@@ -1068,11 +1076,11 @@ print_help () {
 		echo '  spki init'
 		echo '  spki create (server | user | client_server) <file-prefix> [-SAN <subjectAltName>]'
 		echo '  spki create-intermediate'
-		echo '  spki sign (server | user) <CSR> <certificate>'
+		echo '  spki sign (server | user | client_server) <CSR> <certificate>'
 		echo '  spki list'
 		echo '  spki verify (certificate | file-prefix)'
 		echo '  spki export-pkcs12 <file-prefix>'
-		echo '  spki export-trustore <file-prefix>'
+		echo '  spki export-truststore <file-prefix>'
 		echo '  spki revoke (certificate | file-prefix)'
 		echo '  spki revoke-intermediate'
 		echo '  spki list-crl'
@@ -1101,7 +1109,7 @@ case "$COMMAND" in
 		create-intermediate || exit 1
 	;;
 	'sign')
-		if [[ $# -ne 3 || ( "$1" != 'server' && "$1" != 'user' ) ]]; then
+		if [[ $# -ne 3 || ( "$1" != 'server' && "$1" != 'user' && "$1" != 'client_server' ) ]]; then
 			print_help
 			exit 1
 		fi
@@ -1120,9 +1128,9 @@ case "$COMMAND" in
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
 		pkcs12 "$1" || exit 1
 	;;
-	'export-trustore')
+	'export-truststore')
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		trustore "$1" || exit 1
+		truststore "$1" || exit 1
 	;;
 	'revoke')
 		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }

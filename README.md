@@ -49,7 +49,7 @@ The variables in the script itself can be overriden by environment variables. Th
 
 ## Usage
 * `spki init` - Initialize the PKI. This process first sets up the default Subject fields in the OpenSSL configuration files, then generates the Root CA, Intermediate CA, and a combined CA chain file. CRL's and OCSP certificates are also generated
-* `spki create (server | user) <file-prefix>` - Create and sign a key pair with the Intermediate CA. `server` or `user` specifies particular extensions to use. These can be modified by changing the configuration files after initialization. The `file-prefix` is prepended to various file extensions (`.key.pem`, `.cert.pem`, `.csr.pem`)
+* `spki create (server | user | client_server) <file-prefix>` - Create and sign a key pair with the Intermediate CA. `server`, `user` or `client_server` specifies particular extensions to use. These can be modified by changing the configuration files after initialization. The `file-prefix` is prepended to various file extensions (`.key.pem`, `.cert.pem`, `.csr.pem`)
   * `server`
     * `nsCertType = server`
     * `authorityKeyIdentifier = keyid,issuer:always`
@@ -60,13 +60,20 @@ The variables in the script itself can be overriden by environment variables. Th
     * `nsCertType = client, email`
     * `authorityKeyIdentifier = keyid,issuer`
     * `keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment`
-    * `extendedKeyUsage = clientAuth, emailProtection`
+    * `extendedKeyUsage = clientAuth, emailProtection`  
+  
+  * `client_server`
+    * `nsCertType = client, server`
+    * `authorityKeyIdentifier = keyid,issuer`
+    * `keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment`
+    * `extendedKeyUsage = clientAuth, serverAuth`
 
 * `spki create-intermediate` - Recreate the Intermediate CA key and certificate. This command also regenerates the Intermediate CRL if necessary
-* `spki sign (server | user) <CSR> <certificate>` - Sign a specified `CSR` file with the `server` or `user` extensions (see above). `certificate` specifies the output file
+* `spki sign (server | user | client_server) <CSR> <certificate>` - Sign a specified `CSR` file with the `server`, `user` or `client_server` extensions (see above). `certificate` specifies the output file
 * `spki list` - List all of the certificates signed by the Intermediate CA, including expiration times and revocation times
 * `spki verify (certificate | file-prefix)` - Dump the certificate information and verify the chain of trust using the Root CA->Intermediate CA chain. Can be specified as a file or as the prefix used in `spki create`
 * `spki export-pkcs12 <file-prefix>` - Export the key, certificate, and CA chain file to pkcs12 format
+* `spki export-truststore <file-prefix>` - Export CA chain file to pkcs12 format compatible with java expectations
 * `spki revoke (certificate | file-prefix) [reason]` - Revoke the specified certificate. `reason` can be one of: `unspecified`, `keyCompromise`, `CACompromise`, `affiliationChanged`, `superseded`, `cessationOfOperation`, `certificateHold`. This command automatically regenerates the Intermediate CRL
 * `spki revoke-intermediate [reason]` - Revoke the Intermediate CA certificate. `reason` can be one of the options above. This command automatically regenerates the Root CRL
 * `spki list-crl` - Dump information about the CRL's and the revoked certificates
