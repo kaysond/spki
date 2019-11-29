@@ -330,7 +330,7 @@ pkcs12 () {
 		openssl pkcs12 -export -out $P12  \
 			-inkey $KEY -in $CERT \
 			-certfile $CA_CHAIN && \
-		chmod 444 $P12 || { echoc 'Could not export to pkcs12'; return 1; }
+		chmod 444 $P12 || { echoc 'Could not export to pkcs12' red 1>&2; return 1; }
 
 	fi
 	echoc "Created $P12" greenbold
@@ -381,7 +381,7 @@ revoke-intermediate () {
 	ROOT_PASS=$(get-password 'root CA private key' -noverify)
 	exec 3<<<"$ROOT_PASS"
 	openssl ca -config $ROOT_CONF \
-		-revoke $INTRMDT_CERT -passin fd:3 ${REASON_ARGS[*]} || { echoc 'Could not revoke intermediate CA certificate' 1>2; return 1; }
+		-revoke $INTRMDT_CERT -passin fd:3 ${REASON_ARGS[*]} || { echoc 'Could not revoke intermediate CA certificate' red 1>&2; return 1; }
 	generate-crl -rootca || return 1
 	echo
 	echoc 'Successfully revoked intermediate CA certificate' greenbold
