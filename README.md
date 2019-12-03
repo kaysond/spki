@@ -14,8 +14,6 @@ The top of the script contains several configuration variables; the defaults cor
 
 `INTRMDT_PREFIX` - Prefix for all Intermediate CA files
 
-`CLIENT_ENCRYPTION` - Default encryption for client keys
-
 ### Certificate Revocation List (CRL)
 CRL's are automatically generated during initialization if either or both of the DP variables are set. The Intermedate CA Certificate will use the Root CRL DP; all other generated certificates use the Intermediate CRL DP. CRL's are automatically updated on revocation. CRL's served over http should **not** use https. Since the CRL files are frequently regenerated, it is recommended to serve the file directly from the spki root folder, for example by using a soft link. Furthermore, the CRL's are checked during initialization and certificate creation, so it is recommended to prepare the server in advance.
 
@@ -41,7 +39,19 @@ The configuration file can be specified in the environment variable `SPKI_CONFIG
 ```
 ROOT_DIR=/root/ca
 ROOT_PREFIX=root
+
+#
+# below properties are optional and used to provide reasonable defaults for openssl
+# you will be still promped to input actual values 
+#
+countryName=PL
+stateOrProvinceName=Warsaw
+localityName=Warsaw
+organizationalUnitName=R&D
+organizationName=Company Ltd
+emailAddress=example@company.com
 ```
+
 Note: If this file is loaded, all other environment variables are ignored.
 
 #### Environment Variables
@@ -73,7 +83,7 @@ The variables in the script itself can be overriden by environment variables. Th
 * `spki list` - List all of the certificates signed by the Intermediate CA, including expiration times and revocation times
 * `spki verify (certificate | file-prefix)` - Dump the certificate information and verify the chain of trust using the Root CA->Intermediate CA chain. Can be specified as a file or as the prefix used in `spki create`
 * `spki export-pkcs12 <file-prefix>` - Export the key, certificate, and CA chain file to pkcs12 format
-* `spki export-truststore <file-prefix>` - Export CA chain file to pkcs12 format compatible with java expectations
+* `spki export-truststore <file-prefix>` - Export CA chain file to pkcs12 format compatible with java expectations. Requires keytool (bundled with java)
 * `spki revoke (certificate | file-prefix) [reason]` - Revoke the specified certificate. `reason` can be one of: `unspecified`, `keyCompromise`, `CACompromise`, `affiliationChanged`, `superseded`, `cessationOfOperation`, `certificateHold`. This command automatically regenerates the Intermediate CRL
 * `spki revoke-intermediate [reason]` - Revoke the Intermediate CA certificate. `reason` can be one of the options above. This command automatically regenerates the Root CRL
 * `spki list-crl` - Dump information about the CRL's and the revoked certificates
@@ -83,6 +93,94 @@ The variables in the script itself can be overriden by environment variables. Th
 * `spki ocsp-query <url> (certificate | file-prefix) [-rootca]` - Send an OCSP query for the specified certificate to the specified url (e.g. http://127.0.0.1:12345). The command uses the full chain file by default, suitable for verifying certificates signed by the Intermediate CA. Specify `-rootca` to use just the Root CA, suitable for verifying the Intermediate CA certificate.
 * `spki update-config` - Regenerate the openssl configuration files. This allows the configuration variables, such as CRL or OCSP to be updated. It re-prompts for the certificate defaults.
 
+
+## Providing automated inputs
+
+Provided that you prepare config file named `config` with default DN names (`countryName`,`stateOrProvinceName`,`localityName`,`organizationalUnitName`,`organizationName` and `emailAddress`) ie:
+
+```
+ROOT_DIR=/tmp/spki/
+countryName=PL
+stateOrProvinceName=Warsaw
+localityName=Warsaw
+organizationalUnitName=Developers
+organizationName=Company Ltd
+emailAddress=mail@company.com
+```
+
+You can use following script to create all stores in one go:
+
+```bash
+SPKI_CONFIG_FILE=$(pwd)/config
+export SPKI_CONFIG_FILE
+
+source $SPKI_CONFIG_FILE
+
+CA_PRIVATE_KEY_PASSWORD="changeit"
+CA_COMMON_NAME="ca"
+CA_COUNTRY_NAME="$countryName"
+CA_PROVINCE_NAME="$stateOrProvinceName"
+CA_LOCALITY_NAME="$localityName"
+CA_ORGANIZATION_NAME="$organizationName"
+CA_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
+CA_MAIL="$emailAddress"
+
+INTERMEDIATE_COMMON_NAME="intermediete"
+INTERMEDIATE_COUNTRY_NAME="$countryName"
+INTERMEDIATE_PROVINCE_NAME="$stateOrProvinceName"
+INTERMEDIATE_LOCALITY_NAME="$localityName"
+INTERMEDIATE_ORGANIZATION_NAME="$organizationName"
+INTERMEDIATE_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
+INTERMEDIATE_MAIL="$emailAddress"
+
+INTERMEDIATE_PRIVATE_KEY_PASSWORD="changeit2"
+
+ANYKEY="k"
+YES="y"
+
+./spki init <<EOF
+$CA_PRIVATE_KEY_PASSWORD
+$CA_PRIVATE_KEY_PASSWORD
+$CA_COMMON_NAME
+$CA_COUNTRY_NAME
+$CA_PROVINCE_NAME
+$CA_LOCALITY_NAME
+$CA_ORGANIZATION_NAME
+$CA_ORGANIZATIONAL_UNIT_NAME
+$CA_MAIL
+$ANYKEY$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+$INTERMEDIATE_COMMON_NAME
+$INTERMEDIATE_COUNTRY_NAME
+$INTERMEDIATE_PROVINCE_NAME
+$INTERMEDIATE_LOCALITY_NAME
+$INTERMEDIATE_ORGANIZATION_NAME
+$INTERMEDIATE_ORGANIZATIONAL_UNIT_NAME
+$INTERMEDIATE_MAIL
+$YES
+$YES
+$ANYKEY
+EOF
+
+
+BROKER_PRIVATE_KEY_PASSWORD="changeit"
+BROKER_COMMON_NAME="broker"
+./spki create client_server broker -SAN "IP:127.0.0.1" <<EOF
+$BROKER_PRIVATE_KEY_PASSWORD
+$BROKER_PRIVATE_KEY_PASSWORD
+$BROKER_COMMON_NAME
+$CA_COUNTRY_NAME
+$CA_PROVINCE_NAME
+$CA_LOCALITY_NAME
+$CA_ORGANIZATION_NAME
+$CA_ORGANIZATIONAL_UNIT_NAME
+$CA_MAIL
+$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+$YES
+$YES
+$ANYKEY
+EOF
+```
 
 ## Examples
 * [`spki init`](https://asciinema.org/a/238438)
