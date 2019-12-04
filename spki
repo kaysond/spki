@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015
+# shellcheck disable=SC2016
 # Simple PKI
 # By Aram Akhavan
 # Based on https://jamielinux.com/docs/openssl-certificate-authority/
@@ -11,7 +13,7 @@
 #	2019-04-05 	0.7.1	Bug fixes
 #	2019-04-05	0.7.0	Added update-config, export-pkcs12 and SAN support
 #	2019-04-02 	0.6.0	Improved password handling
-# 	2019-03-21	0.5.0	Created
+# 2019-03-21	0.5.0	Created
 #
 
 #############
@@ -23,8 +25,6 @@ ROOT_DIR='/root/ca'
 ROOT_PREFIX='ca'
 INTRMDT_PREFIX='intermediate'
 
-CLIENT_ENCRYPTION='aes256'
-
 ROOT_CRL_DP=''
 INTRMDT_CRL_DP=''
 
@@ -34,7 +34,6 @@ INTRMDT_OCSP=''
 #############
 # End Config
 #############
-
 
 if [ -r "$SPKI_CONFIG_FILE" ]; then
 	. "$SPKI_CONFIG_FILE"
@@ -49,10 +48,6 @@ else
 
 	if [ -n "$SPKI_INTRMDT_PREFIX" ]; then
 		INTRMDT_PREFIX="$SPKI_INTRMDT_PREFIX"
-	fi
-
-	if [ -n "$SPKI_CLIENT_ENCRYPTION" ]; then
-		CLIENT_ENCRYPTION="$SPKI_CLIENT_ENCRYPTION"
 	fi
 
 	if [ -n "$SPKI_ROOT_CRL_DP" ]; then
@@ -94,15 +89,21 @@ CA_CHAIN="$INTRMDT_DIR/certs/ca-chain.cert.pem"
 
 set -o pipefail
 
-init () {
+init() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/create-the-root-pair.html
 	echoc 'Creating root CA directory' green
 	if [ -d "$ROOT_DIR" ]; then
 		echoc "The root CA directory '$ROOT_DIR' already exists." yellow | indent
 		confirm "Are you sure you want to overwrite its contents" || exit 0
-		rm -rf "$ROOT_DIR" >& /dev/null || { echoc "Could not remove $ROOT_DIR" red 1>&2; return 1; }
+		rm -rf "$ROOT_DIR" >&/dev/null || {
+			echoc "Could not remove $ROOT_DIR" red 1>&2
+			return 1
+		}
 	fi
-	mkdir -p "$ROOT_DIR" >& /dev/null || { echoc "Could not create '$ROOT_DIR'" red 1>&2; return 1; }
+	mkdir -p "$ROOT_DIR" >&/dev/null || {
+		echoc "Could not create '$ROOT_DIR'" red 1>&2
+		return 1
+	}
 
 	echoc 'Preparing root directory' green
 	prep-directory "$ROOT_DIR" || return 1
@@ -114,31 +115,43 @@ init () {
 	echoc 'Creating root CA private key' green
 	ROOT_PASS=$(get-password 'root CA private key')
 	exec 3<<<"$ROOT_PASS"
-	openssl genrsa -aes256 -out $ROOT_KEY -passout "fd:3" 4096 |& indent && \
-	chmod 400 $ROOT_KEY || { echoc 'Could not create root CA key' red 1>&2; return 1; }
+	openssl genrsa -aes256 -out "$ROOT_KEY" -passout "fd:3" 4096 |& indent &&
+		chmod 400 "$ROOT_KEY" || {
+		echoc 'Could not create root CA key' red 1>&2
+		return 1
+	}
 
 	echoc 'Creating root CA certificate' green
-	
+
 	exec 3<<<"$ROOT_PASS"
-	openssl req -verbose -config $ROOT_CONF \
-		-key $ROOT_KEY \
+	openssl req -verbose -config "$ROOT_CONF" \
+		-key "$ROOT_KEY" \
 		-new -x509 -days 7300 -sha256 -extensions v3_ca \
-		-out $ROOT_CERT -passin "fd:3" && \
-	chmod 444 $ROOT_CERT || { echoc 'Could not create root CA certificate' red 1>&2; return 1; }
+		-out "$ROOT_CERT" -passin "fd:3" &&
+		chmod 444 "$ROOT_CERT" || {
+		echoc 'Could not create root CA certificate' red 1>&2
+		return 1
+	}
 
 	echoc 'Verifying root CA cert' green
-	openssl x509 -noout -text -in $ROOT_CERT | remove_openssl_hex | indent || { echoc 'Could not verify root CA certificate' red 1>&2; return 1; }
-		
+	openssl x509 -noout -text -in "$ROOT_CERT" | remove_openssl_hex | indent || {
+		echoc 'Could not verify root CA certificate' red 1>&2
+		return 1
+	}
+
 	echoc 'Press any key to continue...' yellow | indent
 	read -n1 -r -s
 
 	# https://jamielinux.com/docs/openssl-certificate-authority/create-the-intermediate-pair.html
 	echoc 'Creating intermediate CA directory' green
-	if [ ! -d $INTRMDT_DIR ]; then
-		mkdir -p $INTRMDT_DIR >& /dev/null || { echoc "Could not create '$INTRMDT_DIR'" red 1>&2; return 1; }
+	if [ ! -d "$INTRMDT_DIR" ]; then
+		mkdir -p "$INTRMDT_DIR" >&/dev/null || {
+			echoc "Could not create '$INTRMDT_DIR'" red 1>&2
+			return 1
+		}
 	fi
 	echoc 'Preparing intermediate CA directory' green
-	prep-directory $INTRMDT_DIR || exit 1
+	prep-directory "$INTRMDT_DIR" || exit 1
 	echoc 'Writing intermediate CA configuration file' green
 	write-intermediate-conf || return 1
 
@@ -146,8 +159,11 @@ init () {
 
 	echo
 	echoc 'Creating certificate chain' green
-	cat $INTRMDT_CERT $ROOT_CERT > $CA_CHAIN && \
-	chmod 444 $CA_CHAIN || { echoc 'Could not create certificate chain' red 1>&2; return 1; }
+	cat "$INTRMDT_CERT" "$ROOT_CERT" >"$CA_CHAIN" &&
+		chmod 444 "$CA_CHAIN" || {
+		echoc 'Could not create certificate chain' red 1>&2
+		return 1
+	}
 
 	generate-crl -rootca || exit 1
 	# The Intermediate CRL is created in the create-intermediate call
@@ -173,24 +189,24 @@ init () {
 	echoc '*Consider generating it on an air-gapped system and using `shred` to remove it.' red
 	echoc '********************************************************************************' red
 	echo
-	if [[ -n "$ROOT_CRL_DP" || -n "$INTRMDT_CRL_DP" ]]; then
+	if [[ -n $ROOT_CRL_DP || -n $INTRMDT_CRL_DP ]]; then
 		echoc 'The following CRLs were created:' green
-		if [[ -n "$ROOT_CRL_DP" ]]; then
+		if [[ -n $ROOT_CRL_DP ]]; then
 			echoc "Root CA: $ROOT_CRL" | indent
 		fi
-		if [[ -n "INTRMDT_CRL_DP" ]]; then
+		if [[ -n $INTRMDT_CRL_DP ]]; then
 			echoc "Intermediate CA: $INTRMDT_CRL" | indent
 		fi
 		echo
 		echoc 'CRLs must be regenerated at regular intervals (Intermediate: 30 days, Root: 4 years). Use `spki generate-crl`' yellow | indent
 		echo
 	fi
-	if [[ -n "$ROOT_OCSP" || -n "$INTRMDT_OCSP" ]]; then
+	if [[ -n $ROOT_OCSP || -n $INTRMDT_OCSP ]]; then
 		echoc 'The following OCSP certificates were created:' green
-		if [[ -n "$ROOT_OCSP" ]]; then
+		if [[ -n $ROOT_OCSP ]]; then
 			echoc "Root CA: $ROOT_OCSP_CERT" | indent
 		fi
-		if [[ -n "INTRMDT_OCSP" ]]; then
+		if [[ -n $INTRMDT_OCSP ]]; then
 			echoc "Intermediate CA: $INTRMDT_OCSP_CERT" | indent
 		fi
 		echo
@@ -198,7 +214,7 @@ init () {
 	echoc 'DONE!' greenbold
 }
 
-create () {
+create() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/sign-server-and-client-certificates.html
 	PREFIX="$2"
 	KEY="$INTRMDT_DIR/private/$PREFIX.key.pem"
@@ -208,138 +224,199 @@ create () {
 	PASS=$(get-password 'private key')
 	exec 3<<<"$PASS"
 	if [[ -z "$CERT_ENCRYPTION" ]]; then
-		openssl genrsa -out $KEY -passout fd:3 2048 |& indent
+		openssl genrsa -out "$KEY" -passout fd:3 2048 |& indent
 	else
-		openssl genrsa -"$CERT_ENCRYPTION" -out $KEY -passout fd:3 2048 |& indent
-	fi && \
-	chmod 400 $KEY && \
-	echoc 'Creating CSR' green
+		openssl genrsa -"$CERT_ENCRYPTION" -out "$KEY" -passout fd:3 2048 |& indent
+	fi &&
+		chmod 400 "$KEY" &&
+		echoc 'Creating CSR' green
 	exec 3<<<"$PASS"
 	if [[ "$3" == "-SAN" ]]; then
-		openssl req -verbose -reqexts SAN -config <(cat $INTRMDT_CONF \
-        	<(printf "\n[SAN]\nsubjectAltName=$4")) \
-			-key $KEY \
-			-new -sha256 -out $CSR -passin fd:3
+		openssl req -verbose -reqexts SAN -config <(cat "$INTRMDT_CONF" \
+			<(printf "\n[SAN]\nsubjectAltName=%s" "$4")) \
+			-key "$KEY" \
+			-new -sha256 -out "$CSR" -passin fd:3
 	else
-		openssl req -config $INTRMDT_CONF \
-			-key $KEY \
-			-new -sha256 -out $CSR -passin fd:3
-	fi && \
-	sign $1 $CSR $CERT || { echoc 'Could not create certificate' red 1>&2; return 1; }
+		openssl req -config "$INTRMDT_CONF" \
+			-key "$KEY" \
+			-new -sha256 -out "$CSR" -passin fd:3
+	fi &&
+		sign "$1" "$CSR" "$CERT" || {
+		echoc 'Could not create certificate' red 1>&2
+		return 1
+	}
 	echo
 	echoc "Successfully created the following files" greenbold
 	echo "Key: $KEY" | indent
 	echo "Certificate: $CERT" | indent
 }
 
-create-intermediate () {
+create-intermediate() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/create-the-intermediate-pair.html
 	echoc 'Creating intermediate CA private key' green
 	INTRMDT_PASS=$(get-password 'intermediate CA private key')
 	exec 3<<<"$INTRMDT_PASS"
-	openssl genrsa -aes256 -out $INTRMDT_KEY -passout "fd:3" 4096 |& indent && \
-	chmod 400 $INTRMDT_KEY || { echoc 'Could not create intermediate CA private key' red 1>&2; return 1; }
+	openssl genrsa -aes256 -out "$INTRMDT_KEY" -passout "fd:3" 4096 |& indent &&
+		chmod 400 "$INTRMDT_KEY" || {
+		echoc 'Could not create intermediate CA private key' red 1>&2
+		return 1
+	}
 
 	exec 3<<<"$INTRMDT_PASS"
-	echoc 'Creating intermediate CA CSR' green && \
-	openssl req -verbose -config $INTRMDT_CONF -new -sha256 \
-		-key $INTRMDT_KEY \
-		-out $INTRMDT_CSR -passin "fd:3" || { echoc 'Could not create intermediate CA CSR' red 1>&2; return 1; }
+	echoc 'Creating intermediate CA CSR' green &&
+		openssl req -verbose -config "$INTRMDT_CONF" -new -sha256 \
+			-key "$INTRMDT_KEY" \
+			-out "$INTRMDT_CSR" -passin "fd:3" || {
+		echoc 'Could not create intermediate CA CSR' red 1>&2
+		return 1
+	}
 
-	if [[ -n "$ROOT_PASS" ]]; then
+	if [[ -n $ROOT_PASS ]]; then
 		exec 3<<<"$ROOT_PASS"
 		PASS_ARGS=(-passin "fd:3")
 	fi
-	echoc 'Signing intermediate CA CSR' green && \
-	openssl ca -config $ROOT_CONF -extensions v3_intermediate_ca \
-		-days 3650 -notext -md sha256 \
-		-in $INTRMDT_CSR \
-		-out $INTRMDT_CERT ${PASS_ARGS[*]} && \
-	chmod 444 $INTRMDT_CERT || { echoc 'Could not sign intermediate CA CSR' red 1>&2; return 1; }
+	echoc 'Signing intermediate CA CSR' green &&
+		openssl ca -config "$ROOT_CONF" -extensions v3_intermediate_ca \
+			-days 3650 -notext -md sha256 \
+			-in "$INTRMDT_CSR" \
+			-out "$INTRMDT_CERT" ${PASS_ARGS[*]} &&
+		chmod 444 "$INTRMDT_CERT" || {
+		echoc 'Could not sign intermediate CA CSR' red 1>&2
+		return 1
+	}
 
 	echoc 'Verifying intermediate CA cert' green
-	openssl x509 -noout -text -in $INTRMDT_CERT | remove_openssl_hex | indent \
-		|| { echoc 'Could not verify intermediate CA certificate' red 1>&2; return 1; }
+	openssl x509 -noout -text -in "$INTRMDT_CERT" | remove_openssl_hex | indent ||
+		{
+			echoc 'Could not verify intermediate CA certificate' red 1>&2
+			return 1
+		}
 	echoc 'Press any key to continue...' yellow | indent
 	read -n1 -r -s
 
 	echoc 'Verifying intermediate CA chain of trust' green
-	openssl verify -CAfile $ROOT_CERT \
-		$INTRMDT_CERT | remove_openssl_hex | indent || { echoc 'Could not verify intermediate CA chain of trust' red 1>&2; return 1; }
+	openssl verify -CAfile "$ROOT_CERT" \
+		"$INTRMDT_CERT" | remove_openssl_hex | indent || {
+		echoc 'Could not verify intermediate CA chain of trust' red 1>&2
+		return 1
+	}
 
 	generate-crl || return 1
 
 	echoc "Successfully created the following files" greenbold
 	echo "Key: $INTRMDT_KEY" | indent
 	echo "Certificate: $INTRMDT_CERT" | indent
-	if [[ -n "$INTRMDT_CRL_DP" ]]; then
+	if [[ -n $INTRMDT_CRL_DP ]]; then
 		echo "CRL: $INTRMDT_CRL" | indent
 	fi
 }
 
-sign () {
+sign() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/sign-server-and-client-certificates.html
 	if [[ "$1" == "server" ]]; then
 		EXT='server_cert'
+	elif [[ "$1" == "client_server" ]]; then
+		EXT='client_server_cert'
 	else
 		EXT='usr_cert'
 	fi
 	CSR="$2"
 	CERT="$3"
 	echoc 'Signing certificate' green
-	openssl ca -verbose -config $INTRMDT_CONF \
+	INTRMDT_PASS=$(get-password 'intermediate CA private key' -noverify)
+	exec 3<<<"$INTRMDT_PASS"
+	openssl ca -verbose -config "$INTRMDT_CONF" \
 		-extensions $EXT -days 375 -notext -md sha256 \
-		-in $CSR \
-		-out $CERT && \
-	chmod 444 $CERT || { echoc 'Could not sign certificate' red 1>&2; return 1; }
+		-in "$CSR" \
+		-out "$CERT" -passin fd:3 &&
+		chmod 444 "$CERT" || {
+		echoc 'Could not sign certificate' red 1>&2
+		return 1
+	}
 
-	verify $CERT || return 1;
+	verify "$CERT" || return 1
 
 	echo
 	echoc "Successfully signed $2 with $1 extensions" greenbold
 	echoc "Created $3" greenbold
 }
 
-verify () {
+verify() {
 	CERT=$1
 	echoc 'Verifying certificate' green
 	openssl x509 -noout -text \
-		-in $CERT | remove_openssl_hex | indent || { echoc 'Could not verify certificate' red 1>&2;  exit 1; } \
-		
+		-in "$CERT" | remove_openssl_hex | indent || {
+		echoc 'Could not verify certificate' red 1>&2
+		exit 1
+	}
+
 	echoc 'Press any key to continue...' yellow | indent
 	read -n1 -r -s
 
 	echoc 'Verifying certificate chain of trust' green
-	if [[ -n "$INTRMDT_CRL_DP" ]]; then
-		openssl verify -verbose -show_chain -crl_check -crl_download -CAfile $CA_CHAIN $CERT |& indent
+	if [[ -n $INTRMDT_CRL_DP ]]; then
+		openssl verify -verbose -show_chain -crl_check -crl_download -CAfile "$CA_CHAIN" "$CERT" |& indent
 	else
-		openssl verify -CAfile $CA_CHAIN $CERT |& indent
-	fi \
-	|| { echoc 'Could not verify certificate chain of trust' red 1>&2;  return 1; }
+		openssl verify -CAfile "$CA_CHAIN" "$CERT" |& indent
+	fi ||
+		{
+			echoc 'Could not verify certificate chain of trust' red 1>&2
+			return 1
+		}
 }
 
-pkcs12 () {
-	KEY=$INTRMDT_DIR/private/"$1".key.pem
-	CERT=$INTRMDT_DIR/certs/"$1".cert.pem
-	P12=$INTRMDT_DIR/certs/"$1".p12
-	if [[ ! -r  $CERT || ! -r $KEY ]]; then
+truststore() {
+	CERT=$INTRMDT_DIR/certs/ca-chain.cert.pem
+	TRUSTSTORE=$INTRMDT_DIR/certs/"$1"_truststore.p12
+
+	command -v keytool 1>/dev/null || {
+		echoc 'keytool not installed - install java'
+		return 1
+	}
+
+	if [[ ! -r $CERT ]]; then
 		echoc "Could not find '$1'" red 1>&2
 		return 1
 	else
-		P12=$INTRMDT_DIR/certs/"$1".p12
-		openssl pkcs12 -export -out $P12  \
-			-inkey $KEY -in $CERT \
-			-certfile $CA_CHAIN && \
-		chmod 444 $P12 || { echoc 'Could not export to pkcs12' red 1>&2; return 1; }
+		INTRMDT_PASS=$(get-password "truststore for $1" -noverify)
+		keytool -importcert -trustcacerts -storetype PKCS12 \
+			-keystore "$TRUSTSTORE" \
+			-alias ca -file "$CA_CHAIN" -noprompt <<<"$(echo -ne "$INTRMDT_PASS\n$INTRMDT_PASS")" &&
+			chmod 444 "$TRUSTSTORE" ||
+			{
+				echoc "Could not create trustore $TRUSTSTORE" red 1>&2
+				return 1
+			}
+	fi
+	echoc "Created $TRUSTSTORE" greenbold
+}
 
+pkcs12() {
+	KEY=$INTRMDT_DIR/private/"$1".key.pem
+	CERT=$INTRMDT_DIR/certs/"$1".cert.pem
+	P12=$INTRMDT_DIR/certs/"$1".p12
+	if [[ ! -r $CERT || ! -r $KEY ]]; then
+		echoc "Could not find '$1'" red 1>&2
+		return 1
+	else
+		INTRMDT_PASS=$(get-password "pkcs12 password for $1" -noverify)
+		exec 3<<<"$INTRMDT_PASS"
+		openssl pkcs12 -export -out "$P12" \
+			-inkey "$KEY" -in "$CERT" \
+			-passout fd:3 \
+			-certfile "$CA_CHAIN" &&
+			chmod 440 "$P12" || {
+			echoc 'Could not export to pkcs12' red 1>&2
+			return 1
+		}
 	fi
 	echoc "Created $P12" greenbold
 }
- 
-list () {
+
+list() {
 	awk 'BEGIN { FS="\t" }
 		{
-			printf "\033[0;32m" $6 "\033[0m\n"; 
+			printf "\033[0;32m" $6 "\033[0m\n";
 			if ($1 == "V") print "\tStatus: Valid";
 			if ($1 == "R") print "\tStatus: Revoked";
 			if ($1 == "E") print "\tStatus: Expired";
@@ -350,165 +427,201 @@ list () {
 			}
 			print "\tSerial: "$4,"\n";
 		}' \
-		$INTRMDT_DIR/index.txt
+		"$INTRMDT_DIR"/index.txt
 }
 
-revoke () {
+revoke() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/certificate-revocation-lists.html#revoke-a-certificate
 	confirm "Revoke $1" || return 0
 	if [ ! -r "$1" ]; then
 		echoc "$1 is not readable" 1>&2
 		return 1
 	fi
-	if [[ -n "$2" ]]; then
+	if [[ -n $2 ]]; then
 		REASON_ARGS=(-crl_reason "$2")
 	fi
 	INTRMDT_PASS=$(get-password 'intermediate CA private key' -noverify)
 	exec 3<<<"$INTRMDT_PASS"
-	openssl ca -config $INTRMDT_CONF \
-		-revoke "$1" -passin fd:3 ${REASON_ARGS[*]} || { echoc "Could not revoke $1" 1>&2; return 1; }
+	openssl ca -config "$INTRMDT_CONF" \
+		-revoke "$1" -passin fd:3 "${REASON_ARGS[*]}" || {
+		echoc "Could not revoke $1" 1>&2
+		return 1
+	}
 	generate-crl || return 1
 	echo
 	echoc "Successfully revoked $1" greenbold
 }
 
-revoke-intermediate () {
+revoke-intermediate() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/certificate-revocation-lists.html#revoke-a-certificate
 	confirm "Revoke intermediate CA certificate" || return 0
-	if [[ -n "$1" ]]; then
+	if [[ -n $1 ]]; then
 		REASON_ARGS=(-crl_reason "$1")
 	fi
 	ROOT_PASS=$(get-password 'root CA private key' -noverify)
 	exec 3<<<"$ROOT_PASS"
-	openssl ca -config $ROOT_CONF \
-		-revoke $INTRMDT_CERT -passin fd:3 ${REASON_ARGS[*]} || { echoc 'Could not revoke intermediate CA certificate' red 1>&2; return 1; }
+	openssl ca -config "$ROOT_CONF" \
+		-revoke "$INTRMDT_CERT" -passin fd:3 "${REASON_ARGS[*]}" || {
+		echoc 'Could not revoke intermediate CA certificate' red 1>&2
+		return 1
+	}
 	generate-crl -rootca || return 1
 	echo
 	echoc 'Successfully revoked intermediate CA certificate' greenbold
 }
 
-list-crl () {
-	if [[ -n "$ROOT_CRL_DP" ]]; then
+list-crl() {
+	if [[ -n $ROOT_CRL_DP ]]; then
 		echoc 'Root CRL' green
-		openssl crl -inform DER -in $ROOT_CRL -noout -text | remove_openssl_hex | indent
+		openssl crl -inform DER -in "$ROOT_CRL" -noout -text | remove_openssl_hex | indent
 	fi
-	if [[ -n "$INTRMDT_CRL_DP" ]]; then
+	if [[ -n $INTRMDT_CRL_DP ]]; then
 		echoc 'Intermediate CRL' green
-		openssl crl -inform DER -in $INTRMDT_CRL -noout -text | remove_openssl_hex | indent
+		openssl crl -inform DER -in "$INTRMDT_CRL" -noout -text | remove_openssl_hex | indent
 	fi
 }
 
-generate-crl () {
+generate-crl() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/certificate-revocation-lists.html
 	# CRL formats changed to DER since that is expected by openssl verify
-	if [[ "$1" == "-rootca" ]]; then 
-		if [[ -n "$ROOT_CRL_DP" ]]; then
+	if [[ "$1" == "-rootca" ]]; then
+		if [[ -n $ROOT_CRL_DP ]]; then
 			echoc 'Generating root CRL' green
-			if [[ -n "$ROOT_PASS" ]]; then
+			if [[ -n $ROOT_PASS ]]; then
 				exec 3<<<"$ROOT_PASS"
 				PASS_ARGS=(-passin "fd:3")
 			fi
-			openssl ca -config $ROOT_CONF \
-				-gencrl -out ${ROOT_CRL/der/pem} \
-				${PASS_ARGS[*]} |& indent || { echoc 'Could not create root CRL' red 1>&2; return 1; }
+			openssl ca -config "$ROOT_CONF" \
+				-gencrl -out "${ROOT_CRL/der/pem}" \
+				"${PASS_ARGS[*]}" |& indent || {
+				echoc 'Could not create root CRL' red 1>&2
+				return 1
+			}
 
 			echoc 'Converting to DER' green
-			openssl crl -in ${ROOT_CRL/der/pem} \
-				-outform DER -out $ROOT_CRL && \
-			rm ${ROOT_CRL/der/pem} || { echoc 'Could not convert to DER' red 1>&2; return 1; }
+			openssl crl -in "${ROOT_CRL/der/pem}" \
+				-outform DER -out "$ROOT_CRL" &&
+				rm "${ROOT_CRL/der/pem}" || {
+				echoc 'Could not convert to DER' red 1>&2
+				return 1
+			}
 
 			echoc 'Verifying root CA CRL' green
-			openssl crl -inform DER -in $ROOT_CRL -noout -text | remove_openssl_hex | indent
+			openssl crl -inform DER -in "$ROOT_CRL" -noout -text | remove_openssl_hex | indent
 			echoc 'Press any key to continue...' yellow | indent
 			read -n1 -r -s
 		fi
-	elif [[ -n "$INTRMDT_CRL_DP" ]]; then
+	elif [[ -n $INTRMDT_CRL_DP ]]; then
 		echoc 'Generating intermediate CRL' green
-		if [[ -n "$INTRMDT_PASS" ]]; then
+		if [[ -n $INTRMDT_PASS ]]; then
 			exec 3<<<"$INTRMDT_PASS"
 			PASS_ARGS=(-passin "fd:3")
 		fi
-		openssl ca -config $INTRMDT_CONF \
-			-gencrl -out ${INTRMDT_CRL/der/pem} \
-			${PASS_ARGS[*]} | indent || { echoc 'Could not create intermediate CRL' red 1>&2; return 1; }
+		openssl ca -config "$INTRMDT_CONF" \
+			-gencrl -out "${INTRMDT_CRL/der/pem}" \
+			"${PASS_ARGS[*]}" | indent || {
+			echoc 'Could not create intermediate CRL' red 1>&2
+			return 1
+		}
 
 		echoc 'Converting to DER' green
-			openssl crl -in ${INTRMDT_CRL/der/pem} \
-				-outform DER -out $INTRMDT_CRL && \
-			rm ${INTRMDT_CRL/der/pem}  || { echoc 'Could not convert to DER' red 1>&2; return 1; }
+		openssl crl -in "${INTRMDT_CRL/der/pem}" \
+			-outform DER -out "$INTRMDT_CRL" &&
+			rm "${INTRMDT_CRL/der/pem}" || {
+			echoc 'Could not convert to DER' red 1>&2
+			return 1
+		}
 
 		echoc 'Verifying intermediate CRL' green
-		openssl crl -inform DER -in $INTRMDT_CRL -noout -text | remove_openssl_hex | indent
+		openssl crl -inform DER -in "$INTRMDT_CRL" -noout -text | remove_openssl_hex | indent
 		echoc 'Press any key to continue...' yellow | indent
 		read -n1 -r -s
 	fi
 }
 
-generate-ocsp () {
+generate-ocsp() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/online-certificate-status-protocol.html
 	if [[ "$1" == "-rootca" ]]; then
-		if [[ -n "$ROOT_OCSP" ]]; then
+		if [[ -n $ROOT_OCSP ]]; then
 			echoc 'Generating root OCSP key' green
 			ROOT_OCSP_PASS=$(get-password 'root OCSP private key')
 			exec 3<<<"$ROOT_OCSP_PASS"
 			openssl genrsa -aes256 \
-				-out $ROOT_OCSP_KEY -passout "fd:3" 4096 |& indent || { echoc 'Could not create root OCSP key' 1>&2; return 1; }
+				-out "$ROOT_OCSP_KEY" -passout "fd:3" 4096 |& indent || {
+				echoc 'Could not create root OCSP key' 1>&2
+				return 1
+			}
 
 			echoc 'Generating root OCSP CSR' green
 			exec 3<<<"$ROOT_OCSP_PASS"
-			openssl req -config $ROOT_CONF -new -sha256 \
-				-key $ROOT_OCSP_KEY \
-				-out $ROOT_OCSP_CSR -passin "fd:3" || { echoc 'Could not create root OCSP CSR' red 1>&2; return 1; }
+			openssl req -config "$ROOT_CONF" -new -sha256 \
+				-key "$ROOT_OCSP_KEY" \
+				-out "$ROOT_OCSP_CSR" -passin "fd:3" || {
+				echoc 'Could not create root OCSP CSR' red 1>&2
+				return 1
+			}
 
 			echoc 'Signing root OCSP certificate' green
 
-			if [[ -n "$ROOT_PASS" ]]; then
+			if [[ -n $ROOT_PASS ]]; then
 				exec 3<<<"$ROOT_PASS"
 				PASS_ARGS=(-passin "fd:3")
 			fi
-			openssl ca -config $ROOT_CONF \
+			openssl ca -config "$ROOT_CONF" \
 				-extensions ocsp -days 375 -notext -md sha256 \
-				-in $ROOT_OCSP_CSR \
-				-out $ROOT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign root OCSP certificate' red 1>&2; return 1; } 
+				-in "$ROOT_OCSP_CSR" \
+				-out "$ROOT_OCSP_CERT" "${PASS_ARGS[*]}" || {
+				echoc 'Could not sign root OCSP certificate' red 1>&2
+				return 1
+			}
 
 			echoc 'Verifying root OCSP certificate' green
-			openssl x509 -in $ROOT_OCSP_CERT -noout -text | remove_openssl_hex | indent
+			openssl x509 -in "$ROOT_OCSP_CERT" -noout -text | remove_openssl_hex | indent
 			echoc 'Press any key to continue...' yellow | indent
 			read -n1 -r -s
 		fi
-	elif [[ -n "$INTRMDT_OCSP" ]]; then
+	elif [[ -n $INTRMDT_OCSP ]]; then
 		echoc 'Generating intermediate OCSP key' green
 		INTRMDT_OCSP_PASS=$(get-password 'intermediate OCSP private key')
 		exec 3<<<"$INTRMDT_OCSP_PASS"
 		openssl genrsa -aes256 \
-			-out $INTRMDT_OCSP_KEY -passout "fd:3" 4096 |& indent || { echoc 'Could not create intermediate OCSP key' 1>&2; return 1; }
+			-out "$INTRMDT_OCSP_KEY" -passout "fd:3" 4096 |& indent || {
+			echoc 'Could not create intermediate OCSP key' 1>&2
+			return 1
+		}
 
 		exec 3<<<"$INTRMDT_OCSP_PASS"
 		echoc 'Generating intermediate OCSP CSR' green
-		openssl req -config $INTRMDT_CONF -new -sha256 \
-			-key $INTRMDT_OCSP_KEY \
-			-out $INTRMDT_OCSP_CSR -passin "fd:3" || { echoc 'Could not create intermediate OCSP CSR' red 1>&2; return 1; }
+		openssl req -config "$INTRMDT_CONF" -new -sha256 \
+			-key "$INTRMDT_OCSP_KEY" \
+			-out "$INTRMDT_OCSP_CSR" -passin "fd:3" || {
+			echoc 'Could not create intermediate OCSP CSR' red 1>&2
+			return 1
+		}
 
 		echoc 'Signing intermediate OCSP certificate' green
-		if [[ -n "$INTRMDT_PASS" ]]; then
+		if [[ -n $INTRMDT_PASS ]]; then
 			exec 3<<<"$INTRMDT_PASS"
 			PASS_ARGS=(-passin "fd:3")
 		fi
-		openssl ca -config $INTRMDT_CONF \
+		openssl ca -config "$INTRMDT_CONF" \
 			-extensions ocsp -days 375 -notext -md sha256 \
-			-in $INTRMDT_OCSP_CSR \
-			-out $INTRMDT_OCSP_CERT ${PASS_ARGS[*]} || { echoc 'Could not sign intermediate OCSP certificate' red 1>&2; return 1; } 
+			-in "$INTRMDT_OCSP_CSR" \
+			-out "$INTRMDT_OCSP_CERT" ${PASS_ARGS[*]} || {
+			echoc 'Could not sign intermediate OCSP certificate' red 1>&2
+			return 1
+		}
 
 		echoc 'Verifying intermediate OCSP certificate' green
-		openssl x509 -in $INTRMDT_OCSP_CERT -noout -text | remove_openssl_hex | indent
+		openssl x509 -in "$INTRMDT_OCSP_CERT" -noout -text | remove_openssl_hex | indent
 		echoc 'Press any key to continue...' yellow | indent
 		read -n1 -r -s
 	fi
 }
 
-ocsp-responder () {
+ocsp-responder() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/online-certificate-status-protocol.html
-	if [[ -n "$ROOT_OCSP" || -n "$INTRMDT_OCSP" ]]; then
+	if [[ -n $ROOT_OCSP || -n "$INTRMDT_OCSP" ]]; then
 		if [[ "$2" == "-rootca" ]]; then
 			CA=$ROOT_CERT
 			INDEX="$ROOT_DIR"/index.txt
@@ -520,59 +633,65 @@ ocsp-responder () {
 			RKEY=$INTRMDT_OCSP_KEY
 			RCERT=$INTRMDT_OCSP_CERT
 		fi
-		openssl ocsp -port $1 -text \
-			-index $INDEX \
-			-CA $CA \
-			-rkey $RKEY \
-			-rsigner $RCERT || { echoc 'Could not start OCSP responder' red 1>&2; return 1; }
+		openssl ocsp -port "$1" -text \
+			-index "$INDEX" \
+			-CA "$CA" \
+			-rkey "$RKEY" \
+			-rsigner "$RCERT" || {
+			echoc 'Could not start OCSP responder' red 1>&2
+			return 1
+		}
 	else
 		echoc 'OCSP is not configured' red 1>&2
 		return 1
 	fi
 }
 
-ocsp-query () {
+ocsp-query() {
 	# https://jamielinux.com/docs/openssl-certificate-authority/online-certificate-status-protocol.html
 	echoc 'Sending query' green
-	openssl ocsp -CAfile $1 \
-      -url $2 -resp_text \
-      -issuer $3 \
-      -cert $4  | remove_openssl_hex | indent || { echoc "Could not complete OCSP query" red 1>&2; return 1; }
+	openssl ocsp -CAfile "$1" \
+		-url "$2" -resp_text \
+		-issuer "$3" \
+		-cert "$4" | remove_openssl_hex | indent || {
+		echoc "Could not complete OCSP query" red 1>&2
+		return 1
+	}
 }
 
-update-config () {
+update-config() {
 	get-default-fields
 	write-root-conf || return 1
 	write-intermediate-conf || return 1
-	if [[ -n "$ROOT_CRL" ]]; then
+	if [[ -n $ROOT_CRL ]]; then
 		generate-crl -rootca || return 1
 	fi
-	if [[ -n "$INTRMDT_CRL" ]]; then
+	if [[ -n $INTRMDT_CRL ]]; then
 		generate-crl || return 1
 	fi
-	if [[ -n "$ROOT_OCSP" ]]; then
+	if [[ -n $ROOT_OCSP ]]; then
 		generate-ocsp -rootca || return 1
 	fi
-	if [[ -n "$INTRMDT_OCSP" ]]; then
+	if [[ -n $INTRMDT_OCSP ]]; then
 		generate-ocsp || return 1
 	fi
 }
 
-get-password () {
+get-password() {
 	PASS=0
 	PASSV=1
 	while [[ "$PASS" != "$PASSV" ]]; do
 		echo -ne '\t' 1>&2
 		echo -ne "\e[33mEnter $1 pass phrase:\e[0;0m" 1>&2
 		read -s -r PASS
-		if (( ${#PASS} < 4 )); then
+		if ((${#PASS} < 4)); then
 			echo -ne '\n\t' 1>&2
 			echoc 'Pass phrase must be at least 4 characters' red 1>&2
 			continue
 		fi
 		if [[ "$2" == "-noverify" ]]; then
 			echo 1>&2
-			break;
+			break
 		fi
 		echo -ne '\n\t' 1>&2
 		echo -ne "\e[33mVerifying - Enter $1 pass phrase:\e[0;0m" 1>&2
@@ -586,20 +705,38 @@ get-password () {
 	echo -n "$PASS"
 }
 
-prep-directory () {
+prep-directory() {
 	for dir in certs crl csr newcerts private; do
-		if [ ! -d $1/$dir ]; then
-			mkdir $1/$dir >& /dev/null || { echoc "Could not create $1/$dir" red 1>&2; return 1; }
+		if [ ! -d "$1/$dir" ]; then
+			mkdir "$1/$dir" >&/dev/null || {
+				echoc "Could not create $1/$dir" red 1>&2
+				return 1
+			}
 		fi
 	done
 	{
-		chmod 700 $1/private && \
-		touch $1/index.txt && \
-		# Added
-		touch $1/index.txt.attr && \
-		echo 1000 > $1/serial && \
-		echo 1000 > $1/crlnumber
-	} 2> /dev/null || { echoc 'Could not create files' red 1>&2; return 1; }
+		chmod 700 "$1"/private &&
+			touch "$1"/index.txt &&
+			# Added
+			touch "$1"/index.txt.attr &&
+			echo 1000 >"$1"/serial &&
+			echo 1000 >"$1"/crlnumber
+	} 2>/dev/null || {
+		echoc 'Could not create files' red 1>&2
+		return 1
+	}
+}
+
+get-from-env-or-read() {
+	NAME=$1
+	VALUE_FROM_ENV=${!NAME}
+	if [ -n "$VALUE_FROM_ENV" ]; then
+		echoc "$VALUE_FROM_ENV (from env property)" green 1>&2
+		VALUE=$VALUE_FROM_ENV
+	else
+		read -r VALUE
+	fi
+	echo $VALUE
 }
 
 get-default-fields() {
@@ -620,20 +757,20 @@ get-default-fields() {
 	)
 
 	DEFAULT_FIELDS='commonName = Common Name'
-	for i in ${fieldNames[@]}; do
+	for i in "${fieldNames[@]}"; do
 		NAME=$i
 		DESC=${fieldMap[$i]}
-		if [[ $NAME == 'organizationName' ]]; then
-			echoc -n "Organization Names (organizationName), separated by ';':" yellow | indent
-			read RESPONSE
+		if [[ "$NAME" == 'organizationName' ]]; then
+			echoc -n "Organization Names (organizationName), separated by ';': " yellow | indent
+			RESPONSE=$(get-from-env-or-read "$NAME")
 			IFS=';'
-			orgNames=($RESPONSE)
+			orgNames="$RESPONSE"
 			unset IFS
 			orgCount=0
 			for orgName in "${orgNames[@]}"; do
 				if [[ "$orgName" != '.' ]]; then
 					DEFAULT_FIELDS+=$'\n'"${orgCount}.organizationName = Organization Name $orgCount"
-					if [[ -n "$orgName" ]]; then
+					if [[ -n $orgName ]]; then
 						DEFAULT_FIELDS+=$'\n'"${orgCount}.organizationName_default = $orgName"
 					fi
 				fi
@@ -641,10 +778,10 @@ get-default-fields() {
 			done
 		else
 			echoc -n "$DESC ($NAME): " yellow | indent
-			read RESPONSE
+			RESPONSE=$(get-from-env-or-read "$NAME")
 			if [[ "$RESPONSE" != '.' ]]; then
 				DEFAULT_FIELDS+=$'\n'"$NAME = $DESC"
-				if [[ -n "$RESPONSE" ]]; then
+				if [[ -n $RESPONSE ]]; then
 					DEFAULT_FIELDS+=$'\n'"${NAME}_default = $RESPONSE"
 				fi
 			fi
@@ -652,280 +789,311 @@ get-default-fields() {
 	done
 }
 
-write-root-conf () {
-	touch $ROOT_CONF >& /dev/null
-	if [ ! -w $ROOT_CONF ]; then
+write-root-conf() {
+	touch "$ROOT_CONF" >&/dev/null
+	if [ ! -w "$ROOT_CONF" ]; then
 		echoc "Could not write '$ROOT_CONF'" 1>&2
 		return 1
 	fi
-	if [[ -n "$ROOT_CRL_DP" ]]; then
+	if [[ -n $ROOT_CRL_DP ]]; then
 		CRLLINE="crlDistributionPoints = $ROOT_CRL_DP"
 	fi
-	if [[ -n "$ROOT_OCSP" ]]; then
+	if [[ -n $ROOT_OCSP ]]; then
 		OCSPLINE="authorityInfoAccess = OCSP;$ROOT_OCSP"
 	fi
-	cat <<- EOF > $ROOT_CONF 2> /dev/null || { echoc "Could not write '$ROOT_CONF'" red 1>&2; return 1; }
-	# OpenSSL root CA configuration file.
-	# https://jamielinux.com/docs/openssl-certificate-authority/appendix/root-configuration-file.html
-	[ ca ]
-	# 'man ca'
-	default_ca = CA_default
-
-	[ CA_default ]
-	# Directory and file locations.
-	dir               = $ROOT_DIR
-	certs             = \$dir/certs
-	crl_dir           = \$dir/crl
-	new_certs_dir     = \$dir/newcerts
-	database          = \$dir/index.txt
-	serial            = \$dir/serial
-	RANDFILE          = \$dir/private/.rand
-
-	# The root key and root certificate.
-	private_key       = \$dir/private/$ROOT_PREFIX.key.pem
-	certificate       = \$dir/certs/$ROOT_PREFIX.cert.pem
-
-	# For certificate revocation lists.
-	crlnumber         = \$dir/crlnumber
-	crl               = \$dir/crl/$ROOT_PREFIX.crl.pem
-	crl_extensions    = crl_ext
-	default_crl_days  = 1465
-
-	# SHA-1 is deprecated, so use SHA-2 instead.
-	default_md        = sha256
-
-	name_opt          = ca_default
-	cert_opt          = ca_default
-	default_days      = 375
-	preserve          = no
-	policy            = policy_strict
-	copy_extensions	  = copy
-
-	[ policy_strict ]
-	# The root CA should only sign intermediate certificates that match.
-	# See the POLICY FORMAT section of 'man ca'.
-	countryName             = match
-	stateOrProvinceName     = match
-	organizationName        = match
-	organizationalUnitName  = optional
-	commonName              = supplied
-	emailAddress            = optional
-
-	[ policy_loose ]
-	# Allow the intermediate CA to sign a more diverse range of certificates.
-	# See the POLICY FORMAT section of the 'ca' man page.
-	countryName             = optional
-	stateOrProvinceName     = optional
-	localityName            = optional
-	organizationName        = optional
-	organizationalUnitName  = optional
-	commonName              = supplied
-	emailAddress            = optional
-
-	[ req ]
-	# Options for the 'req' tool ('man req').
-	default_bits        = 2048
-	distinguished_name  = req_distinguished_name
-	string_mask         = utf8only
-
-	# SHA-1 is deprecated, so use SHA-2 instead.
-	default_md          = sha256
-
-	# Extension to add when the -x509 option is used.
-	x509_extensions     = v3_ca
-
-	[ req_distinguished_name ]
-	# See <https://en.wikipedia.org/wiki/Certificate_signing_request>.
-	$DEFAULT_FIELDS
-
-	[ v3_ca ]
-	# Extensions for a typical CA ('man x509v3_config').
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid:always,issuer
-	basicConstraints = critical, CA:true
-	keyUsage = critical, digitalSignature, cRLSign, keyCertSign
-
-	[ v3_intermediate_ca ]
-	# Extensions for a typical intermediate CA ('man x509v3_config').
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid:always,issuer
-	basicConstraints = critical, CA:true, pathlen:0
-	keyUsage = critical, digitalSignature, cRLSign, keyCertSign
-	$CRLLINE
-	$OCSPLINE
-
-	[ usr_cert ]
-	# Extensions for client certificates ('man x509v3_config').
-	basicConstraints = CA:FALSE
-	nsCertType = client, email
-	nsComment = "OpenSSL Generated Client Certificate"
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid,issuer
-	keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
-	extendedKeyUsage = clientAuth, emailProtection
-
-	[ server_cert ]
-	# Extensions for server certificates ('man x509v3_config').
-	basicConstraints = CA:FALSE
-	nsCertType = server
-	nsComment = "OpenSSL Generated Server Certificate"
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid,issuer:always
-	keyUsage = critical, digitalSignature, keyEncipherment
-	extendedKeyUsage = serverAuth
-
-	[ crl_ext ]
-	# Extension for CRLs ('man x509v3_config').
-	authorityKeyIdentifier=keyid:always
-
-	[ ocsp ]
-	# Extension for OCSP signing certificates ('man ocsp').
-	basicConstraints = CA:FALSE
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid,issuer
-	keyUsage = critical, digitalSignature
-	extendedKeyUsage = critical, OCSPSigning
+	cat <<-EOF >"$ROOT_CONF" 2>/dev/null || {
+		# OpenSSL root CA configuration file.
+		# https://jamielinux.com/docs/openssl-certificate-authority/appendix/root-configuration-file.html
+		[ ca ]
+		# 'man ca'
+		default_ca = CA_default
+		
+		[ CA_default ]
+		# Directory and file locations.
+		dir               = $ROOT_DIR
+		certs             = \$dir/certs
+		crl_dir           = \$dir/crl
+		new_certs_dir     = \$dir/newcerts
+		database          = \$dir/index.txt
+		serial            = \$dir/serial
+		RANDFILE          = \$dir/private/.rand
+		
+		# The root key and root certificate.
+		private_key       = \$dir/private/$ROOT_PREFIX.key.pem
+		certificate       = \$dir/certs/$ROOT_PREFIX.cert.pem
+		
+		# For certificate revocation lists.
+		crlnumber         = \$dir/crlnumber
+		crl               = \$dir/crl/$ROOT_PREFIX.crl.pem
+		crl_extensions    = crl_ext
+		default_crl_days  = 1465
+		
+		# SHA-1 is deprecated, so use SHA-2 instead.
+		default_md        = sha256
+		
+		name_opt          = ca_default
+		cert_opt          = ca_default
+		default_days      = 375
+		preserve          = no
+		policy            = policy_strict
+		copy_extensions	  = copy
+		
+		[ policy_strict ]
+		# The root CA should only sign intermediate certificates that match.
+		# See the POLICY FORMAT section of 'man ca'.
+		countryName             = match
+		stateOrProvinceName     = match
+		organizationName        = match
+		organizationalUnitName  = optional
+		commonName              = supplied
+		emailAddress            = optional
+		
+		[ policy_loose ]
+		# Allow the intermediate CA to sign a more diverse range of certificates.
+		# See the POLICY FORMAT section of the 'ca' man page.
+		countryName             = optional
+		stateOrProvinceName     = optional
+		localityName            = optional
+		organizationName        = optional
+		organizationalUnitName  = optional
+		commonName              = supplied
+		emailAddress            = optional
+		
+		[ req ]
+		# Options for the 'req' tool ('man req').
+		default_bits        = 2048
+		distinguished_name  = req_distinguished_name
+		string_mask         = utf8only
+		
+		# SHA-1 is deprecated, so use SHA-2 instead.
+		default_md          = sha256
+		
+		# Extension to add when the -x509 option is used.
+		x509_extensions     = v3_ca
+		
+		[ req_distinguished_name ]
+		# See <https://en.wikipedia.org/wiki/Certificate_signing_request>.
+		$DEFAULT_FIELDS
+		
+		[ v3_ca ]
+		# Extensions for a typical CA ('man x509v3_config').
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid:always,issuer
+		basicConstraints = critical, CA:true
+		keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+		
+		[ v3_intermediate_ca ]
+		# Extensions for a typical intermediate CA ('man x509v3_config').
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid:always,issuer
+		basicConstraints = critical, CA:true, pathlen:0
+		keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+		$CRLLINE
+		$OCSPLINE
+		
+		[ usr_cert ]
+		# Extensions for client certificates ('man x509v3_config').
+		basicConstraints = CA:FALSE
+		nsCertType = client, email
+		nsComment = "OpenSSL Generated Client Certificate"
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer
+		keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+		extendedKeyUsage = clientAuth, emailProtection
+		
+		[ server_cert ]
+		# Extensions for server certificates ('man x509v3_config').
+		basicConstraints = CA:FALSE
+		nsCertType = server
+		nsComment = "OpenSSL Generated Server Certificate"
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer:always
+		keyUsage = critical, digitalSignature, keyEncipherment
+		extendedKeyUsage = serverAuth
+		
+		 [ client_server_cert ]
+		basicConstraints = CA:FALSE
+		nsCertType = client, server
+		nsComment = "OpenSSL Generated Server Certificate"
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer:always
+		keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+		extendedKeyUsage = clientAuth, serverAuth
+		$CRLLINE
+		$OCSPLINE
+		
+		[ crl_ext ]
+		# Extension for CRLs ('man x509v3_config').
+		authorityKeyIdentifier=keyid:always
+		
+		[ ocsp ]
+		# Extension for OCSP signing certificates ('man ocsp').
+		basicConstraints = CA:FALSE
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer
+		keyUsage = critical, digitalSignature
+		extendedKeyUsage = critical, OCSPSigning
 	EOF
+		echoc "Could not write '$ROOT_CONF'" red 1>&2
+		return 1
+	}
+
 }
-write-intermediate-conf () {
-	touch $INTRMDT_CONF >& /dev/null
-	if [ ! -w $INTRMDT_CONF ]; then
+
+write-intermediate-conf() {
+	touch "$INTRMDT_CONF" >&/dev/null
+	if [ ! -w "$INTRMDT_CONF" ]; then
 		echoc "Could not write $INTRMDT_CONF"
 		return 1
 	fi
-	if [[ -n "$INTRMDT_CRL_DP" ]]; then
+	if [[ -n $INTRMDT_CRL_DP ]]; then
 		CRLLINE="crlDistributionPoints = $INTRMDT_CRL_DP"
 	fi
-	if [[ -n "$INTRMDT_OCSP" ]]; then
+	if [[ -n $INTRMDT_OCSP ]]; then
 		OCSPLINE="authorityInfoAccess = OCSP;$INTRMDT_OCSP"
 	fi
-	cat <<- EOF > $INTRMDT_CONF 2> /dev/null || { echoc "Could not write $INTRMDT_CONF"; return 1; }
-	# OpenSSL intermediate CA configuration file.
-	# https://jamielinux.com/docs/openssl-certificate-authority/appendix/intermediate-configuration-file.html
-	[ ca ]
-	# 'man ca'
-	default_ca = CA_default
-
-	[ CA_default ]
-	# Directory and file locations.
-	dir               = $INTRMDT_DIR
-	certs             = \$dir/certs
-	crl_dir           = \$dir/crl
-	new_certs_dir     = \$dir/newcerts
-	database          = \$dir/index.txt
-	serial            = \$dir/serial
-	RANDFILE          = \$dir/private/.rand
-
-	# The root key and root certificate.
-	private_key       = \$dir/private/$INTRMDT_PREFIX.key.pem
-	certificate       = \$dir/certs/$INTRMDT_PREFIX.cert.pem
-
-	# For certificate revocation lists.
-	crlnumber         = \$dir/crlnumber
-	crl               = \$dir/crl/$INTRMDT_PREFIX.crl.pem
-	crl_extensions    = crl_ext
-	default_crl_days  = 32
-
-	# SHA-1 is deprecated, so use SHA-2 instead.
-	default_md        = sha256
-
-	name_opt          = ca_default
-	cert_opt          = ca_default
-	default_days      = 375
-	preserve          = no
-	policy            = policy_loose
-	copy_extensions	  = copy
-
-	[ policy_strict ]
-	# The root CA should only sign intermediate certificates that match.
-	# See the POLICY FORMAT section of 'man ca'.
-	countryName             = match
-	stateOrProvinceName     = match
-	organizationName        = match
-	organizationalUnitName  = optional
-	commonName              = supplied
-	emailAddress            = optional
-
-	[ policy_loose ]
-	# Allow the intermediate CA to sign a more diverse range of certificates.
-	# See the POLICY FORMAT section of the 'ca' man page.
-	countryName             = optional
-	stateOrProvinceName     = optional
-	localityName            = optional
-	organizationName        = optional
-	organizationalUnitName  = optional
-	commonName              = supplied
-	emailAddress            = optional
-
-	[ req ]
-	# Options for the 'req' tool ('man req').
-	default_bits        = 2048
-	distinguished_name  = req_distinguished_name
-	string_mask         = utf8only
-
-	# SHA-1 is deprecated, so use SHA-2 instead.
-	default_md          = sha256
-
-	# Extension to add when the -x509 option is used.
-	x509_extensions     = v3_ca
-
-	[ req_distinguished_name ]
-	# See <https://en.wikipedia.org/wiki/Certificate_signing_request>.
-	$DEFAULT_FIELDS
-
-	[ v3_ca ]
-	# Extensions for a typical CA ('man x509v3_config').
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid:always,issuer
-	basicConstraints = critical, CA:true
-	keyUsage = critical, digitalSignature, cRLSign, keyCertSign
-
-	[ v3_intermediate_ca ]
-	# Extensions for a typical intermediate CA ('man x509v3_config').
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid:always,issuer
-	basicConstraints = critical, CA:true, pathlen:0
-	keyUsage = critical, digitalSignature, cRLSign, keyCertSign
-
-	[ usr_cert ]
-	# Extensions for client certificates ('man x509v3_config').
-	basicConstraints = CA:FALSE
-	nsCertType = client, email
-	nsComment = "OpenSSL Generated Client Certificate"
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid,issuer
-	keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
-	extendedKeyUsage = clientAuth, emailProtection
-	$CRLLINE
-	$OCSPLINE
-
-	[ server_cert ]
-	# Extensions for server certificates ('man x509v3_config').
-	basicConstraints = CA:FALSE
-	nsCertType = server
-	nsComment = "OpenSSL Generated Server Certificate"
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid,issuer:always
-	keyUsage = critical, digitalSignature, keyEncipherment
-	extendedKeyUsage = serverAuth
-	$CRLLINE
-	$OCSPLINE
-
-	[ crl_ext ]
-	# Extension for CRLs ('man x509v3_config').
-	authorityKeyIdentifier=keyid:always
-
-	[ ocsp ]
-	# Extension for OCSP signing certificates ('man ocsp').
-	basicConstraints = CA:FALSE
-	subjectKeyIdentifier = hash
-	authorityKeyIdentifier = keyid,issuer
-	keyUsage = critical, digitalSignature
-	extendedKeyUsage = critical, OCSPSigning
+	cat <<-EOF >"$INTRMDT_CONF" 2>/dev/null || {
+		# OpenSSL intermediate CA configuration file.
+		# https://jamielinux.com/docs/openssl-certificate-authority/appendix/intermediate-configuration-file.html
+		[ ca ]
+		# 'man ca'
+		default_ca = CA_default
+		
+		[ CA_default ]
+		# Directory and file locations.
+		dir               = $INTRMDT_DIR
+		certs             = \$dir/certs
+		crl_dir           = \$dir/crl
+		new_certs_dir     = \$dir/newcerts
+		database          = \$dir/index.txt
+		serial            = \$dir/serial
+		RANDFILE          = \$dir/private/.rand
+		
+		# The root key and root certificate.
+		private_key       = \$dir/private/$INTRMDT_PREFIX.key.pem
+		certificate       = \$dir/certs/$INTRMDT_PREFIX.cert.pem
+		
+		# For certificate revocation lists.
+		crlnumber         = \$dir/crlnumber
+		crl               = \$dir/crl/$INTRMDT_PREFIX.crl.pem
+		crl_extensions    = crl_ext
+		default_crl_days  = 32
+		
+		# SHA-1 is deprecated, so use SHA-2 instead.
+		default_md        = sha256
+		
+		name_opt          = ca_default
+		cert_opt          = ca_default
+		default_days      = 375
+		preserve          = no
+		policy            = policy_loose
+		copy_extensions	  = copy
+		
+		[ policy_strict ]
+		# The root CA should only sign intermediate certificates that match.
+		# See the POLICY FORMAT section of 'man ca'.
+		countryName             = match
+		stateOrProvinceName     = match
+		organizationName        = match
+		organizationalUnitName  = optional
+		commonName              = supplied
+		emailAddress            = optional
+		
+		[ policy_loose ]
+		# Allow the intermediate CA to sign a more diverse range of certificates.
+		# See the POLICY FORMAT section of the 'ca' man page.
+		countryName             = optional
+		stateOrProvinceName     = optional
+		localityName            = optional
+		organizationName        = optional
+		organizationalUnitName  = optional
+		commonName              = supplied
+		emailAddress            = optional
+		
+		[ req ]
+		# Options for the 'req' tool ('man req').
+		default_bits        = 2048
+		distinguished_name  = req_distinguished_name
+		string_mask         = utf8only
+		
+		# SHA-1 is deprecated, so use SHA-2 instead.
+		default_md          = sha256
+		
+		# Extension to add when the -x509 option is used.
+		x509_extensions     = v3_ca
+		
+		[ req_distinguished_name ]
+		# See <https://en.wikipedia.org/wiki/Certificate_signing_request>.
+		$DEFAULT_FIELDS
+		
+		[ v3_ca ]
+		# Extensions for a typical CA ('man x509v3_config').
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid:always,issuer
+		basicConstraints = critical, CA:true
+		keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+		
+		[ v3_intermediate_ca ]
+		# Extensions for a typical intermediate CA ('man x509v3_config').
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid:always,issuer
+		basicConstraints = critical, CA:true, pathlen:0
+		keyUsage = critical, digitalSignature, cRLSign, keyCertSign
+		
+		[ usr_cert ]
+		# Extensions for client certificates ('man x509v3_config').
+		basicConstraints = CA:FALSE
+		nsCertType = client, email
+		nsComment = "OpenSSL Generated Client Certificate"
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer
+		keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+		extendedKeyUsage = clientAuth, emailProtection
+		$CRLLINE
+		$OCSPLINE
+		
+		[ server_cert ]
+		# Extensions for server certificates ('man x509v3_config').
+		basicConstraints = CA:FALSE
+		nsCertType = server
+		nsComment = "OpenSSL Generated Server Certificate"
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer:always
+		keyUsage = critical, digitalSignature, keyEncipherment
+		extendedKeyUsage = serverAuth
+		$CRLLINE
+		$OCSPLINE
+		
+		 [ client_server_cert ]
+		basicConstraints = CA:FALSE
+		nsCertType = client, server
+		nsComment = "OpenSSL Generated Server Certificate"
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer:always
+		keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+		extendedKeyUsage = clientAuth, serverAuth
+		$CRLLINE
+		$OCSPLINE
+		
+		[ crl_ext ]
+		# Extension for CRLs ('man x509v3_config').
+		authorityKeyIdentifier=keyid:always
+		
+		[ ocsp ]
+		# Extension for OCSP signing certificates ('man ocsp').
+		basicConstraints = CA:FALSE
+		subjectKeyIdentifier = hash
+		authorityKeyIdentifier = keyid,issuer
+		keyUsage = critical, digitalSignature
+		extendedKeyUsage = critical, OCSPSigning
 	EOF
+		echoc "Could not write $INTRMDT_CONF"
+		return 1
+	}
+
 }
 
-check-spki-integrity () {
+check-spki-integrity() {
 	if [ ! -d "$ROOT_DIR" ]; then
 		echoc "Could not read $ROOT_DIR" yellow 1>&2
 		return 1
@@ -934,35 +1102,35 @@ check-spki-integrity () {
 		echoc "Could not read $INTRMDT_DIR" yellow 1>&2
 		return 1
 	fi
-	for i in $ROOT_CONF $ROOT_CERT $INTRMDT_CONF $INTRMDT_KEY $INTRMDT_CERT $CA_CHAIN; do
-		if [ ! -r $i ]; then
+	for i in "$ROOT_CONF" "$ROOT_CERT" "$INTRMDT_CONF" "$INTRMDT_KEY" "$INTRMDT_CERT" $CA_CHAIN; do
+		if [ ! -r "$i" ]; then
 			echoc "Could not read $i" yellow 1>&2
 			return 1
 		fi
 	done
-	if [[ -n "$INTRMDT_CRL_DP" && ! -r $INTRMDT_CRL ]]; then
+	if [[ -n $INTRMDT_CRL_DP && ! -r "$INTRMDT_CRL" ]]; then
 		echoc "Could not read $INTRMDT_CRL" yellow 1>&2
 		return 1
 	fi
-	if [[ -n "$ROOT_CRL_DP" && ! -r $ROOT_CRL ]]; then
+	if [[ -n $ROOT_CRL_DP && ! -r "$ROOT_CRL" ]]; then
 		echoc "Could not read $ROOT_CRL" yellow 1>&2
 		return 1
 	fi
-	if [[ -n "$INTRMDT_OCSP" && ! -r "$INTRMDT_OCSP_KEY" ]]; then
+	if [[ -n $INTRMDT_OCSP && ! -r "$INTRMDT_OCSP_KEY" ]]; then
 		echoc "Could not read $INTRMDT_OCSP_KEY" yellow 1>&2
 		return 1
 	fi
-	if [[ -n "$ROOT_OCSP" && ! -r "$ROOT_OCSP_KEY" ]]; then
+	if [[ -n $ROOT_OCSP && ! -r "$ROOT_OCSP_KEY" ]]; then
 		echoc "Could not read $ROOT_OCSP_KEY" yellow 1>&2
 		return 1
 	fi
-	if [[ "$1" == "-rootca" && ! -r $ROOT_KEY ]]; then
+	if [[ "$1" == "-rootca" && ! -r "$ROOT_KEY" ]]; then
 		echoc "Could not read $ROOT_KEY" yellow 1>&2
 		return 1
 	fi
 }
 
-find-cert () {
+find-cert() {
 	if [[ -r "$1" ]]; then
 		CERT="$1"
 	elif [[ -r $INTRMDT_DIR/certs/"$1".cert.pem ]]; then
@@ -971,152 +1139,196 @@ find-cert () {
 		echoc "Could not find certificate '$1'" red 1>&2
 		return 1
 	fi
-	echo $CERT
+	echo "$CERT"
 }
 
-remove_openssl_hex () {
+remove_openssl_hex() {
 	grep -vE '^[[:space:]]*([0-9a-f]{2}:)+([0-9a-f]{2})?[[:space:]]*$'
 }
 
-confirm () {
+confirm() {
 	echo -ne "\e[33m$1 (y/n)?\e[0;0m" | indent
-	read answer
+	read -r answer
 	if [[ "$answer" != "y" ]]; then
 		return 1
 	fi
 }
 
-echoc () {
-	if [[ $1 == "-n" ]]; then
+echoc() {
+	if [[ "$1" == "-n" ]]; then
 		NO_NEWLINE="-n"
 		shift
 	fi
-	case $2 in
-		'red')
-			CC='\e[31m'
+	case "$2" in
+	'red')
+		CC='\e[31m'
 		;;
-		'green')
-			CC='\e[32m'
+	'green')
+		CC='\e[32m'
 		;;
-		'greenbold')
-			CC='\e[1;32m'
+	'greenbold')
+		CC='\e[1;32m'
 		;;
-		'yellow')
-			CC='\e[33m'
+	'yellow')
+		CC='\e[33m'
 		;;
-		*)
-			CC='\e[0m'
+	*)
+		CC='\e[0m'
 		;;
 	esac
 	echo $NO_NEWLINE -e "${CC}$1\e[0m"
 }
 
-indent () {
+indent() {
 	sed "s/^/\t/"
 }
 
-print_help () {
-		echo 'Usage:'
-		echo '  spki init'
-		echo '  spki create (server | user) <file-prefix> [-SAN <subjectAltName>]'
-		echo '  spki create-intermediate'
-		echo '  spki sign (server | user) <CSR> <certificate>'
-		echo '  spki list'
-		echo '  spki verify (certificate | file-prefix)'
-		echo '  spki export-pkcs12 <file-prefix>'
-		echo '  spki revoke (certificate | file-prefix)'
-		echo '  spki revoke-intermediate'
-		echo '  spki list-crl'
-		echo '  spki generate-crl [-rootca]'
-		echo '  spki generate-ocsp [-rootca]'
-		echo '  spki ocsp-responder <port> [-rootca]'
-		echo '  spki ocsp-query <url> (certificate | file-prefix) [-rootca]'
-		echo '  spki update-config'
+print_help() {
+	echo 'Usage:'
+	echo '  spki init'
+	echo '  spki create (server | user | client_server) <file-prefix> [-SAN <subjectAltName>]'
+	echo '  spki create-intermediate'
+	echo '  spki sign (server | user | client_server) <CSR> <certificate>'
+	echo '  spki list'
+	echo '  spki verify (certificate | file-prefix)'
+	echo '  spki export-pkcs12 <file-prefix>'
+	echo '  spki export-truststore <file-prefix>'
+	echo '  spki revoke (certificate | file-prefix)'
+	echo '  spki revoke-intermediate'
+	echo '  spki list-crl'
+	echo '  spki generate-crl [-rootca]'
+	echo '  spki generate-ocsp [-rootca]'
+	echo '  spki ocsp-responder <port> [-rootca]'
+	echo '  spki ocsp-query <url> (certificate | file-prefix) [-rootca]'
+	echo '  spki update-config'
 }
 COMMAND=$1
 shift
 case "$COMMAND" in
-	'init')
-		init || exit 1
+'init')
+	init || exit 1
 	;;
-	'create')
-		if [[ "$1" != 'server' && "$1" != 'user' || ( $# -eq 4 && ( "$3" != '-SAN' || -z "$4" ) ) || $# -lt 2 ]]; then
-			print_help
-			exit 1
-		fi
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		create $@ || exit 1
-	;;
-	'create-intermediate')
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		create-intermediate || exit 1
-	;;
-	'sign')
-		if [[ $# -ne 3 || ( "$1" != 'server' && "$1" != 'user' ) ]]; then
-			print_help
-			exit 1
-		fi
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		sign $1 $2 $3 || exit 1
-	;;
-	'list')
-		list
-	;;
-	'verify')
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		CERT=$(find-cert "$1") || exit 1
-		verify $CERT || exit 1
-	;;
-	'export-pkcs12')
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		pkcs12 "$1" || exit 1
-	;;
-	'revoke')
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		CERT=$(find-cert "$1") || exit 1
-		revoke $CERT $2 || exit 1
-	;;
-	'revoke-intermediate')
-		check-spki-integrity -rootca || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		revoke-intermediate $1 || exit 1
-	;;
-	'list-crl')
-		check-spki-integrity || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		list-crl || exit 1
-	;;
-	'generate-crl')
-		check-spki-integrity $1 || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		generate-crl $1 || exit 1
-	;;
-	'generate-ocsp')
-		check-spki-integrity $1 || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		generate-ocsp $1 || exit 1
-	;;
-	'ocsp-responder')
-		if [[ $# < 1 || $# > 2 || $# == 2 && "$2" != "-rootca" ]]; then
-			print_help
-			exit 0
-		fi
-		check-spki-integrity $2 || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		ocsp-responder $1 $2 || exit 1
-	;;
-	'ocsp-query')
-		if [[ $# < 2 || $# > 3 || $# == 3 && "$3" != "-rootca" ]]; then
-			print_help
-			exit 0
-		fi
-		check-spki-integrity "$3" || { echoc 'Could not verify spki root folder integrity' red 1>&2; exit 1; }
-		CERT=$(find-cert "$2") || exit 1
-		if [[ "$3" == "-rootca" ]]; then
-			ocsp-query $ROOT_CERT "$1" $ROOT_CERT $CERT || exit 1
-		else
-			ocsp-query $CA_CHAIN "$1" $INTRMDT_CERT $CERT || exit 1
-		fi
-	;;
-	'update-config')
-		update-config || exit 1
-	;;
-	*)
+'create')
+	if [[ "$1" != 'server' && "$1" != 'user' && "$1" != 'client_server' || ($# -eq 4 && ("$3" != '-SAN' || -z "$4")) || $# -lt 2 ]]; then
 		print_help
+		exit 1
+	fi
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	create "$@" || exit 1
+	;;
+'create-intermediate')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	create-intermediate || exit 1
+	;;
+'sign')
+	if [[ $# -ne 3 || ("$1" != 'server' && "$1" != 'user' && "$1" != 'client_server') ]]; then
+		print_help
+		exit 1
+	fi
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	sign "$1" "$2" "$3" || exit 1
+	;;
+'list')
+	list
+	;;
+'verify')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	CERT=$(find-cert "$1") || exit 1
+	verify "$CERT" || exit 1
+	;;
+'export-pkcs12')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	pkcs12 "$1" || exit 1
+	;;
+'export-truststore')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	truststore "$1" || exit 1
+	;;
+'revoke')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	CERT=$(find-cert "$1") || exit 1
+	revoke "$CERT" "$2" || exit 1
+	;;
+'revoke-intermediate')
+	check-spki-integrity -rootca || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	revoke-intermediate "$1" || exit 1
+	;;
+'list-crl')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	list-crl || exit 1
+	;;
+'generate-crl')
+	check-spki-integrity "$1" || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	generate-crl "$1" || exit 1
+	;;
+'generate-ocsp')
+	check-spki-integrity "$1" || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	generate-ocsp "$1" || exit 1
+	;;
+'ocsp-responder')
+	if [[ $# -lt 1 || $# -gt 2 || $# == 2 && "$2" != "-rootca" ]]; then
+		print_help
+		exit 0
+	fi
+	check-spki-integrity "$2" || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	ocsp-responder "$1" "$2" || exit 1
+	;;
+'ocsp-query')
+	if [[ $# -nt 2 || $# -gt 3 || $# == 3 && "$3" != "-rootca" ]]; then
+		print_help
+		exit 0
+	fi
+	check-spki-integrity "$3" || {
+		echoc 'Could not verify spki root folder integrity' red 1>&2
+		exit 1
+	}
+	CERT=$(find-cert "$2") || exit 1
+	if [[ "$3" == "-rootca" ]]; then
+		ocsp-query "$ROOT_CERT" "$1" "$ROOT_CERT" "$CERT" || exit 1
+	else
+		ocsp-query "$CA_CHAIN" "$1" "$INTRMDT_CERT" "$CERT" || exit 1
+	fi
+	;;
+'update-config')
+	update-config || exit 1
+	;;
+*)
+	print_help
 	;;
 esac
