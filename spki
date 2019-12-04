@@ -1,20 +1,13 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2015
 # shellcheck disable=SC2016
+###########################
 # Simple PKI
 # By Aram Akhavan
 # Based on https://jamielinux.com/docs/openssl-certificate-authority/
 #
-# Revision History:
-#	2019-06-06	0.8.0	Added external configuration options
-#	2019-06-05	0.7.4	Intermediate CA CRL now defaults to 32 day expiry, Root to 4 year + 5 day
-#	2019-05-30	0.7.3	Bug fixes
-#	2019-05-07	0.7.2	Root CA CRL now defaults to 4 year expiry
-#	2019-04-05 	0.7.1	Bug fixes
-#	2019-04-05	0.7.0	Added update-config, export-pkcs12 and SAN support
-#	2019-04-02 	0.6.0	Improved password handling
-# 2019-03-21	0.5.0	Created
-#
+# Version 0.9.0
+###########################
 
 #############
 # Config
