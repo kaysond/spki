@@ -24,6 +24,12 @@ INTRMDT_CRL_DP=''
 ROOT_OCSP=''
 INTRMDT_OCSP=''
 
+countryName=''
+stateOrProvinceName=''
+localityName=''
+organizationalUnitName=''
+organizationName=''
+
 #############
 # End Config
 #############
@@ -31,33 +37,27 @@ INTRMDT_OCSP=''
 if [ -r "$SPKI_CONFIG_FILE" ]; then
 	. "$SPKI_CONFIG_FILE"
 else
-	if [ -n "$SPKI_ROOT_DIR" ]; then
-		ROOT_DIR="$SPKI_ROOT_DIR"
-	fi
-
-	if [ -n "$SPKI_ROOT_PREFIX" ]; then
-		ROOT_PREFIX="$SPKI_ROOT_PREFIX"
-	fi
-
-	if [ -n "$SPKI_INTRMDT_PREFIX" ]; then
-		INTRMDT_PREFIX="$SPKI_INTRMDT_PREFIX"
-	fi
-
-	if [ -n "$SPKI_ROOT_CRL_DP" ]; then
-		ROOT_CRL_DP="$SPKI_ROOT_CRL_DP"
-	fi
-
-	if [ -n "$SPKI_INTRMDT_CRL_DP" ]; then
-		INTRMDT_CRL_DP="$SPKI_INTRMDT_CRL_DP"
-	fi
-
-	if [ -n "$SPKI_ROOT_OCSP" ]; then
-		ROOT_OCSP="$SPKI_ROOT_OCSP"
-	fi
-
-	if [ -n "$SPKI_INTRMDT_OCSP" ]; then
-		INTRMDT_OCSP="$SPKI_INTRMDT_OCSP"
-	fi
+	CONFIG_NAMES=(
+		ROOT_DIR
+		ROOT_PREFIX
+		INTRMDT_PREFIX
+		ROOT_CRL_DP
+		INTRMDT_CRL_DP
+		ROOT_OCSP
+		INTRMDT_OCSP
+		countryName
+		stateOrProvinceName
+		localityName
+		organizationalUnitName
+		organizationName
+		emailAddress
+	)
+	for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
+		EXT_NAME="SPKI_$CONFIG_NAME"
+		if [[ -n ${!EXT_NAME} ]]; then
+			typeset "$CONFIG_NAME=${!EXT_NAME}"
+		fi
+	done
 fi
 
 ROOT_CONF="$ROOT_DIR/openssl.cnf"
@@ -723,8 +723,8 @@ prep-directory() {
 get-from-env-or-read() {
 	NAME=$1
 	VALUE_FROM_ENV=${!NAME}
-	if [ -n "$VALUE_FROM_ENV" ]; then
-		echoc "$VALUE_FROM_ENV (from env property)" green 1>&2
+	if [[ -n $VALUE_FROM_ENV ]]; then
+		echoc "$VALUE_FROM_ENV (from environment)" green 1>&2
 		VALUE=$VALUE_FROM_ENV
 	else
 		read -r VALUE
