@@ -3,7 +3,7 @@
 
 The wrapper is based on Jamie Nguyen's guide: [OpenSSL Certificate Authority](https://jamielinux.com/docs/openssl-certificate-authority/ )
 ## Installation
-Copy `spki` to a location in your path. [Releases](https://github.com/kaysond/spki/releases) use [semantic versioning](https://semver.org/) to identify backwards-incompatible changes.
+Copy the latest release of `spki` to a location in your path. [Releases](https://github.com/kaysond/spki/releases) use [semantic versioning](https://semver.org/) to identify backwards-incompatible changes.
 
 ## Configuration
 The top of the script contains several configuration variables; the defaults correspond to the guide. External configuration methods that do not require script modification are also supported (see below).
@@ -28,6 +28,18 @@ OCSP signing keys are automatically generated during initialization if either or
 
 `INTRMDT_OCSP`- Intermediate CA OCSP (e.g. 'URI:http://ocsp.domain.com')
 
+### OpenSSL DN Defaults
+`spki init` prompts for the default values for certificate Distinguished Name parts and stores them in the OpenSSL configuration file. These can also be specified programmatically by using the following variables:
+
+* `countryName`
+* `stateOrProvinceName`
+* `localityName`
+* `organizationalUnitName`
+* `organizationName`
+* `emailAddress`
+
+(or set them to '.' to prevent prompting that field)
+
 ### External Configuration
 Configuration can be specified externally, without modifying the script, via environment variables. The precedence order of the configuration methods is:
 1. Configuration File
@@ -39,23 +51,13 @@ The configuration file can be specified in the environment variable `SPKI_CONFIG
 ```
 ROOT_DIR=/root/ca
 ROOT_PREFIX=root
-
-#
-# below properties are optional and used to provide reasonable defaults for openssl
-# you will be still promped to input actual values 
-#
-countryName=PL
-stateOrProvinceName=Warsaw
-localityName=Warsaw
-organizationalUnitName=R&D
-organizationName=Company Ltd
-emailAddress=example@company.com
+countryName=US
 ```
 
 Note: If this file is loaded, all other environment variables are ignored.
 
 #### Environment Variables
-The variables in the script itself can be overriden by environment variables. The environment variable name should be those in the script but prefixed with `SPKI_` (e.g. `SPKI_ROOT_DIR` and `SPKI_ROOT_CRL_DP`).
+Variables defined in the script itself can be overriden by environment variables. The environment variable name should be those in the script but prefixed with `SPKI_` (e.g. `SPKI_ROOT_DIR` and `SPKI_ROOT_CRL_DP`).
 
 ## Usage
 * `spki init` - Initialize the PKI. This process first sets up the default Subject fields in the OpenSSL configuration files, then generates the Root CA, Intermediate CA, and a combined CA chain file. CRL's and OCSP certificates are also generated
@@ -93,11 +95,11 @@ The variables in the script itself can be overriden by environment variables. Th
 * `spki ocsp-query <url> (certificate | file-prefix) [-rootca]` - Send an OCSP query for the specified certificate to the specified url (e.g. http://127.0.0.1:12345). The command uses the full chain file by default, suitable for verifying certificates signed by the Intermediate CA. Specify `-rootca` to use just the Root CA, suitable for verifying the Intermediate CA certificate.
 * `spki update-config` - Regenerate the openssl configuration files. This allows the configuration variables, such as CRL or OCSP to be updated. It re-prompts for the certificate defaults.
 
+## Automating `spki init`
 
-## Providing automated inputs
+You can automate the PKI initialization by doing the following.
 
-Provided that you prepare config file named `config` with default DN names (`countryName`,`stateOrProvinceName`,`localityName`,`organizationalUnitName`,`organizationName` and `emailAddress`) ie:
-
+Prepare a configuration file named `config`, making sure to specify default DN parts (`countryName`, `stateOrProvinceName`, `localityName`, etc.) i.e.:
 ```
 ROOT_DIR=/tmp/spki/
 countryName=PL
@@ -108,24 +110,23 @@ organizationName=Company Ltd
 emailAddress=mail@company.com
 ```
 
-You can use following script to create all stores in one go:
-
+Then use following script to create the PKI and a certificate in one go:
 ```bash
 SPKI_CONFIG_FILE=$(pwd)/config
 export SPKI_CONFIG_FILE
 
 source $SPKI_CONFIG_FILE
 
-CA_PRIVATE_KEY_PASSWORD="changeit"
-CA_COMMON_NAME="ca"
-CA_COUNTRY_NAME="$countryName"
-CA_PROVINCE_NAME="$stateOrProvinceName"
-CA_LOCALITY_NAME="$localityName"
-CA_ORGANIZATION_NAME="$organizationName"
-CA_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
-CA_MAIL="$emailAddress"
+ROOT_PRIVATE_KEY_PASSWORD="<INSERT PASSWORD HERE>"
+ROOT_COMMON_NAME="Root CA"
+ROOT_COUNTRY_NAME="$countryName"
+ROOT_PROVINCE_NAME="$stateOrProvinceName"
+ROOT_LOCALITY_NAME="$localityName"
+ROOT_ORGANIZATION_NAME="$organizationName"
+ROOT_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
+ROOT_MAIL="$emailAddress"
 
-INTERMEDIATE_COMMON_NAME="intermediete"
+INTERMEDIATE_COMMON_NAME="Intermediate CA"
 INTERMEDIATE_COUNTRY_NAME="$countryName"
 INTERMEDIATE_PROVINCE_NAME="$stateOrProvinceName"
 INTERMEDIATE_LOCALITY_NAME="$localityName"
@@ -133,21 +134,21 @@ INTERMEDIATE_ORGANIZATION_NAME="$organizationName"
 INTERMEDIATE_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
 INTERMEDIATE_MAIL="$emailAddress"
 
-INTERMEDIATE_PRIVATE_KEY_PASSWORD="changeit2"
+INTERMEDIATE_PRIVATE_KEY_PASSWORD="<INSERT PASSWORD HERE>"
 
 ANYKEY="k"
 YES="y"
 
 ./spki init <<EOF
-$CA_PRIVATE_KEY_PASSWORD
-$CA_PRIVATE_KEY_PASSWORD
-$CA_COMMON_NAME
-$CA_COUNTRY_NAME
-$CA_PROVINCE_NAME
-$CA_LOCALITY_NAME
-$CA_ORGANIZATION_NAME
-$CA_ORGANIZATIONAL_UNIT_NAME
-$CA_MAIL
+$ROOT_PRIVATE_KEY_PASSWORD
+$ROOT_PRIVATE_KEY_PASSWORD
+$ROOT_COMMON_NAME
+$ROOT_COUNTRY_NAME
+$ROOT_PROVINCE_NAME
+$ROOT_LOCALITY_NAME
+$ROOT_ORGANIZATION_NAME
+$ROOT_ORGANIZATIONAL_UNIT_NAME
+$ROOT_MAIL
 $ANYKEY$INTERMEDIATE_PRIVATE_KEY_PASSWORD
 $INTERMEDIATE_PRIVATE_KEY_PASSWORD
 $INTERMEDIATE_COMMON_NAME
@@ -162,19 +163,18 @@ $YES
 $ANYKEY
 EOF
 
-
-BROKER_PRIVATE_KEY_PASSWORD="changeit"
-BROKER_COMMON_NAME="broker"
-./spki create client_server broker -SAN "IP:127.0.0.1" <<EOF
-$BROKER_PRIVATE_KEY_PASSWORD
-$BROKER_PRIVATE_KEY_PASSWORD
-$BROKER_COMMON_NAME
-$CA_COUNTRY_NAME
-$CA_PROVINCE_NAME
-$CA_LOCALITY_NAME
-$CA_ORGANIZATION_NAME
-$CA_ORGANIZATIONAL_UNIT_NAME
-$CA_MAIL
+CERT_PRIVATE_KEY_PASSWORD="<INSERT PASSWORD HERE>"
+CERT_COMMON_NAME="Test client_server"
+./spki create client_server test <<EOF
+$CERT_PRIVATE_KEY_PASSWORD
+$CERT_PRIVATE_KEY_PASSWORD
+$CERT_COMMON_NAME
+$ROOT_COUNTRY_NAME
+$ROOT_PROVINCE_NAME
+$ROOT_LOCALITY_NAME
+$ROOT_ORGANIZATION_NAME
+$ROOT_ORGANIZATIONAL_UNIT_NAME
+$ROOT_MAIL
 $INTERMEDIATE_PRIVATE_KEY_PASSWORD
 $YES
 $YES
@@ -188,3 +188,6 @@ EOF
 * [`spki create, spki revoke`](https://asciinema.org/a/238544)
 
 * [`spki ocsp-responder, spki ocsp-query`](https://asciinema.org/a/238767)
+
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md)
