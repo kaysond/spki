@@ -271,8 +271,8 @@ create-intermediate() {
 		openssl ca -config "$ROOT_CONF" -extensions v3_intermediate_ca \
 			-days 3650 -notext -md sha256 \
 			-in "$INTRMDT_CSR" \
-			-out "$INTRMDT_CERT" "${PASS_ARGS[*]}" &&
-		chmod 444 "$INTRMDT_CERT" || {
+			-out "$INTRMDT_CERT" "${PASS_ARGS[@]}" &&
+		chmod 444 "$INTRMDT_CERT" || {	
 		echoc 'Could not sign intermediate CA CSR' red 1>&2
 		return 1
 	}
@@ -485,7 +485,7 @@ generate-crl() {
 			fi
 			openssl ca -config "$ROOT_CONF" \
 				-gencrl -out "${ROOT_CRL/der/pem}" \
-				"${PASS_ARGS[*]}" |& indent || {
+				"${PASS_ARGS[@]}" |& indent || {
 				echoc 'Could not create root CRL' red 1>&2
 				return 1
 			}
@@ -511,7 +511,7 @@ generate-crl() {
 		fi
 		openssl ca -config "$INTRMDT_CONF" \
 			-gencrl -out "${INTRMDT_CRL/der/pem}" \
-			"${PASS_ARGS[*]}" | indent || {
+			"${PASS_ARGS[@]}" | indent || {
 			echoc 'Could not create intermediate CRL' red 1>&2
 			return 1
 		}
@@ -562,7 +562,7 @@ generate-ocsp() {
 			openssl ca -config "$ROOT_CONF" \
 				-extensions ocsp -days 375 -notext -md sha256 \
 				-in "$ROOT_OCSP_CSR" \
-				-out "$ROOT_OCSP_CERT" "${PASS_ARGS[*]}" || {
+				-out "$ROOT_OCSP_CERT" "${PASS_ARGS[@]}" || {
 				echoc 'Could not sign root OCSP certificate' red 1>&2
 				return 1
 			}
@@ -599,7 +599,7 @@ generate-ocsp() {
 		openssl ca -config "$INTRMDT_CONF" \
 			-extensions ocsp -days 375 -notext -md sha256 \
 			-in "$INTRMDT_OCSP_CSR" \
-			-out "$INTRMDT_OCSP_CERT" "${PASS_ARGS[*]}" || {
+			-out "$INTRMDT_OCSP_CERT" "${PASS_ARGS[@]}" || {
 			echoc 'Could not sign intermediate OCSP certificate' red 1>&2
 			return 1
 		}
