@@ -791,7 +791,7 @@ write-root-conf() {
 	if [[ -n $ROOT_OCSP ]]; then
 		OCSPLINE="authorityInfoAccess = OCSP;$ROOT_OCSP"
 	fi
-	cat <<-EOF > "$ROOT_CONF" 2> /dev/null || { echoc "Could not write '$ROOT_CONF'" red >&2; return 1 }
+	cat <<-EOF > "$ROOT_CONF" 2> /dev/null || { echoc "Could not write '$ROOT_CONF'" red >&2; return 1; }
 		# OpenSSL root CA configuration file.
 		# https://jamielinux.com/docs/openssl-certificate-authority/appendix/root-configuration-file.html
 		[ ca ]
@@ -833,6 +833,7 @@ write-root-conf() {
 		# See the POLICY FORMAT section of 'man ca'.
 		countryName             = match
 		stateOrProvinceName     = match
+		localityName            = match
 		organizationName        = match
 		organizationalUnitName  = optional
 		commonName              = supplied
@@ -938,7 +939,7 @@ write-intermediate-conf() {
 	if [[ -n $INTRMDT_OCSP ]]; then
 		OCSPLINE="authorityInfoAccess = OCSP;$INTRMDT_OCSP"
 	fi
-	cat <<-EOF > "$INTRMDT_CONF" 2> /dev/null || { echoc "Could not write $INTRMDT_CONF"; return 1 }
+	cat <<-EOF > "$INTRMDT_CONF" 2> /dev/null || { echoc "Could not write '$INTRMDT_CONF'"; return 1; }
 		# OpenSSL intermediate CA configuration file.
 		# https://jamielinux.com/docs/openssl-certificate-authority/appendix/intermediate-configuration-file.html
 		[ ca ]
@@ -980,6 +981,7 @@ write-intermediate-conf() {
 		# See the POLICY FORMAT section of 'man ca'.
 		countryName             = match
 		stateOrProvinceName     = match
+		localityName            = match
 		organizationName        = match
 		organizationalUnitName  = optional
 		commonName              = supplied
@@ -1084,7 +1086,7 @@ check-spki-integrity() {
 		echoc "Could not read $INTRMDT_DIR" yellow >&2
 		return 1
 	fi
-	for i in "$ROOT_CONF" "$ROOT_CERT" "$INTRMDT_CONF" "$INTRMDT_KEY" "$INTRMDT_CERT" $CA_CHAIN; do
+	for i in "$ROOT_CONF" "$ROOT_CERT" "$INTRMDT_CONF" "$INTRMDT_KEY" "$INTRMDT_CERT" "$CA_CHAIN"; do
 		if [ ! -r "$i" ]; then
 			echoc "Could not read $i" yellow >&2
 			return 1
