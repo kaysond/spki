@@ -362,7 +362,7 @@ truststore() {
 	TRUSTSTORE=$INTRMDT_DIR/certs/"$1"_truststore.p12
 
 	command -v keytool 1>/dev/null || {
-		echoc 'keytool not installed - install java'
+		echoc 'keytool not installed - install java' red >&2
 		return 1
 	}
 
@@ -384,6 +384,7 @@ truststore() {
 }
 
 pkcs12() {
+	echoc "Exporting keypair to pkcs12 format" green
 	KEY=$INTRMDT_DIR/private/"$1".key.pem
 	CERT=$INTRMDT_DIR/certs/"$1".cert.pem
 	P12=$INTRMDT_DIR/certs/"$1".p12
@@ -391,8 +392,8 @@ pkcs12() {
 		echoc "Could not find '$1'" red >&2
 		return 1
 	else
-		INTRMDT_PASS=$(get-password "pkcs12 password for $1" -noverify)
-		exec 3<<<"$INTRMDT_PASS"
+		P12_PASS=$(get-password "pkcs12 export")
+		exec 3<<<"$P12_PASS"
 		openssl pkcs12 -export -out "$P12" \
 			-inkey "$KEY" -in "$CERT" \
 			-passout fd:3 \
@@ -1115,7 +1116,7 @@ check-spki-integrity() {
 }
 
 find-cert() {
-	if [[ -r "$1" ]]; then
+	if [[ -f "$1" && -r "$1" ]]; then
 		CERT="$1"
 	elif [[ -r $INTRMDT_DIR/certs/"$1".cert.pem ]]; then
 		CERT=$INTRMDT_DIR/certs/"$1".cert.pem
