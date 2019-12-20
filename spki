@@ -480,13 +480,13 @@ generate-crl() {
 	if [[ "$1" == "-rootca" ]]; then
 		if [[ -n $ROOT_CRL_DP ]]; then
 			echoc 'Generating root CRL' green
-			if [[ -n $ROOT_PASS ]]; then
-				exec 3<<<"$ROOT_PASS"
-				PASS_ARGS=(-passin "fd:3")
+			if [[ -z $ROOT_PASS ]]; then
+				ROOT_PASS=$(get-password 'root CA private key' -noverify)
 			fi
+			exec 3<<<"$ROOT_PASS"
 			openssl ca -config "$ROOT_CONF" \
 				-gencrl -out "${ROOT_CRL/der/pem}" \
-				"${PASS_ARGS[@]}" |& indent || {
+				-passin "fd:3" |& indent || {
 				echoc 'Could not create root CRL' red >&2
 				return 1
 			}
@@ -506,13 +506,13 @@ generate-crl() {
 		fi
 	elif [[ -n $INTRMDT_CRL_DP ]]; then
 		echoc 'Generating intermediate CRL' green
-		if [[ -n $INTRMDT_PASS ]]; then
-			exec 3<<<"$INTRMDT_PASS"
-			PASS_ARGS=(-passin "fd:3")
+		if [[ -z $INTRMDT_PASS ]]; then
+			INTRMDT_PASS=$(get-password 'intermediate CA private key' -noverify)
 		fi
+		exec 3<<<"$INTRMDT_PASS"
 		openssl ca -config "$INTRMDT_CONF" \
 			-gencrl -out "${INTRMDT_CRL/der/pem}" \
-			"${PASS_ARGS[@]}" | indent || {
+			-passin "fd:3" | indent || {
 			echoc 'Could not create intermediate CRL' red >&2
 			return 1
 		}
