@@ -83,6 +83,7 @@ Variables defined in the script itself can be overriden by environment variables
 * `spki create-intermediate` - Recreate the Intermediate CA key and certificate. This command also regenerates the Intermediate CRL if necessary
 * `spki sign (server | user | client_server) <CSR> <certificate>` - Sign a specified `CSR` file with the `server`, `user` or `client_server` extensions (see above). `certificate` specifies the output file
 * `spki list` - List all of the certificates signed by the Intermediate CA, including expiration times and revocation times
+* `spki verify-intermediate` - Dump the intermediate CA certificate information and verify the chain of trust using the Root CA certificate
 * `spki verify (certificate | file-prefix)` - Dump the certificate information and verify the chain of trust using the Root CA->Intermediate CA chain. Can be specified as a file or as the prefix used in `spki create`
 * `spki export-pkcs12 <file-prefix>` - Export the key, certificate, and CA chain file to pkcs12 format
 * `spki export-truststore <file-prefix>` - Export CA chain file to pkcs12 format compatible with java expectations. Requires keytool (bundled with java)

@@ -289,15 +289,7 @@ create-intermediate() {
 
 	generate-crl || return 1
 
-	echoc 'Verifying intermediate CA chain of trust' green
-	if [[ -n $INTRMDT_CRL_DP ]]; then
-		CRL_ARGS=("-crl_check" "-crl_download")
-	fi
-	openssl verify -show_chain "${CRL_ARGS[@]}" -CAfile "$ROOT_CERT" \
-		"$INTRMDT_CERT" | remove_openssl_hex | indent || {
-		echoc 'Could not verify intermediate CA chain of trust' red >&2
-		return 1
-	}
+	verify-intermediate || return 1
 
 	echoc "Successfully created the following files" greenbold
 	echo "Key: $INTRMDT_KEY" | indent
@@ -335,6 +327,18 @@ sign() {
 	echo
 	echoc "Successfully signed $2 with $1 extensions" greenbold
 	echoc "Created $3" greenbold
+}
+
+verify-intermediate() {
+	echoc 'Verifying intermediate CA chain of trust' green
+	if [[ -n $INTRMDT_CRL_DP ]]; then
+		CRL_ARGS=("-crl_check" "-crl_download")
+	fi
+	openssl verify -show_chain "${CRL_ARGS[@]}" -CAfile "$ROOT_CERT" \
+		"$INTRMDT_CERT" | remove_openssl_hex | indent || {
+		echoc 'Could not verify intermediate CA chain of trust' red >&2
+		return 1
+	}
 }
 
 verify() {
@@ -1179,6 +1183,7 @@ print_help() {
 	echo '  spki create-intermediate'
 	echo '  spki sign (server | user | client_server) <CSR> <certificate>'
 	echo '  spki list'
+	echo '  spki verify-intermediate'
 	echo '  spki verify (certificate | file-prefix)'
 	echo '  spki export-pkcs12 <file-prefix>'
 	echo '  spki export-truststore <file-prefix>'
@@ -1228,6 +1233,13 @@ case "$COMMAND" in
 	;;
 'list')
 	list
+	;;
+'verify-intermediate')
+	check-spki-integrity || {
+		echoc 'Could not verify spki root folder integrity' red >&2
+		exit 1
+	}
+	verify-intermediate || exit 1
 	;;
 'verify')
 	check-spki-integrity || {
