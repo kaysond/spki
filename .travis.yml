@@ -1,0 +1,9 @@
+language: bash
+dist: bionic
+before_install:
+  - sudo apt-get -y install nodejs openjdk-11-openjdk shellcheck
+  - sudo npm install -g bats http-server
+install: skip
+script:
+  - bats ./test/test.bats
+  - shellcheck -e SC2015 -e SC2016 ./spki
