@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2015
-# shellcheck disable=SC2016
 ###########################
 # Simple PKI
 # By Aram Akhavan
@@ -23,17 +21,18 @@ INTRMDT_CRL_DP=''
 ROOT_OCSP=''
 INTRMDT_OCSP=''
 
-countryName=''
-stateOrProvinceName=''
-localityName=''
-organizationalUnitName=''
-organizationName=''
-emailAddress=''
+# countryName=''
+# stateOrProvinceName=''
+# localityName=''
+# organizationalUnitName=''
+# organizationName=''
+# emailAddress=''
 #############
 # End Config
 #############
 
 if [ -r "$SPKI_CONFIG_FILE" ]; then
+	# shellcheck disable=SC1090
 	. "$SPKI_CONFIG_FILE"
 else
 	CONFIG_NAMES=(
@@ -176,12 +175,7 @@ init() {
 	echoc "Root CA: $ROOT_KEY" | indent
 	echoc "Intermediate CA: $INTRMDT_KEY" | indent
 	echo
-	echoc '**********************************!!WARNING!!***********************************' red
-	echoc '*Security of the Root CA Private Key is critical!' red
-	echoc '*It is highly recommended to store this key offline.' red
-	echoc '*Consider generating it on an air-gapped system and using `shred` to remove it.' red
-	echoc '********************************************************************************' red
-	echo
+
 	if [[ -n $ROOT_CRL_DP || -n $INTRMDT_CRL_DP ]]; then
 		echoc 'The following CRLs were created:' green
 		if [[ -n $ROOT_CRL_DP ]]; then
@@ -204,6 +198,13 @@ init() {
 		fi
 		echo
 	fi
+
+	echoc '**********************************!!WARNING!!***********************************' red
+	echoc '*Security of the Root CA Private Key is critical!' red
+	echoc '*It is highly recommended to store this key offline.' red
+	echoc '*Consider generating it on an air-gapped system and using `shred` to remove it.' red
+	echoc '********************************************************************************' red
+	echo
 	echoc 'DONE!' greenbold
 }
 
@@ -332,7 +333,7 @@ sign() {
 verify-intermediate() {
 	echoc 'Verifying intermediate CA chain of trust' green
 	if [[ -n $INTRMDT_CRL_DP ]]; then
-		CRL_ARGS=("-crl_check" "-crl_download")
+		CRL_ARGS=("-verbose" "-crl_check" "-crl_download")
 	fi
 	openssl verify -show_chain "${CRL_ARGS[@]}" -CAfile "$ROOT_CERT" \
 		"$INTRMDT_CERT" | remove_openssl_hex | indent || {
@@ -369,8 +370,8 @@ truststore() {
 	CERT=$INTRMDT_DIR/certs/ca-chain.cert.pem
 	TRUSTSTORE=$INTRMDT_DIR/certs/"$1"_truststore.p12
 
-	command -v keytool 1>/dev/null || {
-		echoc 'keytool not installed - install java' red >&2
+	command -v keytool &>/dev/null || {
+		echoc 'keytool command not found. You may need to install java' red >&2
 		return 1
 	}
 
@@ -378,7 +379,7 @@ truststore() {
 		echoc "Could not find '$1'" red >&2
 		return 1
 	else
-		INTRMDT_PASS=$(get-password "truststore for $1" -noverify)
+		INTRMDT_PASS=$(get-password "truststore export")
 		keytool -importcert -trustcacerts -storetype PKCS12 \
 			-keystore "$TRUSTSTORE" \
 			-alias ca -file "$CA_CHAIN" -noprompt <<<"$(echo -ne "$INTRMDT_PASS\n$INTRMDT_PASS")" &&
@@ -628,12 +629,16 @@ ocsp-responder() {
 			INDEX="$ROOT_DIR"/index.txt
 			RKEY=$ROOT_OCSP_KEY
 			RCERT=$ROOT_OCSP_CERT
+			PASS=$(get-password 'root OCSP private key' -noverify)
 		else
 			CA=$CA_CHAIN
 			INDEX=$INTRMDT_DIR/index.txt
 			RKEY=$INTRMDT_OCSP_KEY
 			RCERT=$INTRMDT_OCSP_CERT
+			PASS=$(get-password 'intermediate OCSP private key' -noverify)
 		fi
+		#exec 3<<<"$PASS"
+		# openssl ocsp does not yet support the -passin arg
 		openssl ocsp -port "$1" -text \
 			-index "$INDEX" \
 			-CA "$CA" \

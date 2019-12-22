@@ -14,25 +14,23 @@ teardown() {
 }
 
 @test "invoking spki without arguments prints usage" {
-  run ./spki
-  [ "$status" -eq 1 ]
-  [ "${lines[0]}" = "Usage:" ]
+	run ./spki
+	[ "$status" -eq 1 ]
+	[ "${lines[0]}" = "Usage:" ]
 }
 
 @test "init creates a root and intermediate cert with the right DNs" {
-	#skip
 	run init_from_input
 
 	ROOTCERT=$(openssl x509 -in /tmp/spki/certs/ca.cert.pem -noout -text)
-	echo "$ROOTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$ROOTCERT" | grep "Subject: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$ROOTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
+	echo "$ROOTCERT" | grep "Subject: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
 	INTRMDTCERT=$(openssl x509 -in /tmp/spki/intermediate/certs/intermediate.cert.pem -noout -text)
-	echo "$INTRMDTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$INTRMDTCERT" | grep "Subject: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$INTRMDTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
+	echo "$INTRMDTCERT" | grep "Subject: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
 }
 
 @test "init with config file overwrites file and env vars" {
-	#skip
 	export SPKI_CONFIG_FILE="test/config"
 	export SPKI_ROOT_PREFIX="test"
 	run init_from_input
@@ -45,7 +43,6 @@ teardown() {
 }
 
 @test "conf defaults get set properly from user input" {
-	#skip
 	run init_from_input
 
 	[ "$status" -eq 0 ]
@@ -72,7 +69,6 @@ teardown() {
 }
 
 @test "conf defaults get set properly from env vars" {
-	#skip
 	export SPKI_countryName=US
 	export SPKI_stateOrProvinceName=CA
 	export SPKI_localityName=SoCal
@@ -112,7 +108,6 @@ teardown() {
 }
 
 @test "create server certificate" {
-	#skip
 	init_from_input
 
 	run create server test
@@ -139,7 +134,6 @@ teardown() {
 }
 
 @test "create user certificate" {
-	#skip
 	init_from_input
 
 	run create user test
@@ -166,7 +160,6 @@ teardown() {
 }
 
 @test "create client_server certificate" {
-	#skip
 	init_from_input
 
 	run create client_server test
@@ -192,7 +185,6 @@ teardown() {
 }
 
 @test "verify" {
-	#skip
 	init_from_input
 	run create client_server test
 
@@ -204,29 +196,46 @@ teardown() {
 }
 
 @test "sign" {
-	#skip
 	init_from_input
 	create_csr
 
 	CERT="/tmp/spki/intermediate/certs/test.cert.pem"
-	run sign client_server "$CSR" "$CERT"
-
+	run ./spki sign client_server "$CSR" "$CERT" <<-EOF
+	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+	$YES
+	$YES
+	$ANYKEY
+	EOF
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/certs/test.cert.pem" ]
 }
 
 @test "export to pkcs12" {
-	#skip
 	init_from_input
 	create client_server test
 
-	run pkcs12 test
+	run ./spki export-pkcs12 test <<-EOF
+	$PRIVATE_KEY_PASSWORD
+	$PRIVATE_KEY_PASSWORD
+	EOF
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/certs/test.p12" ]
 }
 
+@test "export to trust store" {
+	command -v keytool
+	init_from_input
+	create client_server test
+
+	run ./spki export-truststore test <<-EOF
+	$PRIVATE_KEY_PASSWORD
+	$PRIVATE_KEY_PASSWORD
+	EOF
+	[ "$status" -eq 0 ]
+	[ -f "/tmp/spki/intermediate/certs/test_truststore.p12" ]
+}
+
 @test "list" {
-	#skip
 	init_from_input
 	create client_server test
 
@@ -239,7 +248,6 @@ teardown() {
 }
 
 @test "generate crl" {
-	#skip
 	run init_from_input_crl
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/crl/ca.crl.der" ]
@@ -261,7 +269,6 @@ teardown() {
 }
 
 @test "list-crl" {
-	#skip
 	init_from_input_crl
 	run ./spki list-crl
 	[ "$status" -eq 0 ]
@@ -276,18 +283,14 @@ teardown() {
 	[[ "${lines[19]}" =~ "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" ]]
 }
 
-@test "create and revoke cert" {
+@test "create and revoke cert (crl)" {
 	init_from_input_crl
 	http-server /tmp/spki &> /dev/null &
 
 	run create client_server test
 	[ "$status" -eq 0 ]
 
-	run ./spki revoke test keyCompromise <<-EOF
-	$YES
-	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
-	$ANYKEY
-	EOF
+	run revoke test
 	[ "$status" -eq 0 ]
 
 	run ./spki verify test <<-EOF
@@ -302,8 +305,8 @@ teardown() {
 
 	run ./spki list-crl
 	[ "$status" -eq 0 ]
-	[[ "${lines[30]}" =~ "Serial Number: 1000" ]]
-	[[ "${lines[34]}" =~ "Key Compromise" ]]
+	[[ "${lines[29]}" =~ "Serial Number: 1000" ]]
+	[[ "${lines[33]}" =~ "Key Compromise" ]]
 	kill %%
 }
 
@@ -321,4 +324,40 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[[ "${lines[14]}" =~ "Serial Number: 1000" ]]
 	[[ "${lines[18]}" =~ "Superseded" ]]
+
+	# this doesn't actually check the CRL DP
+	# since it looks it up in the local database first
+	run ./spki verify-intermediate
+	[ "$status" -eq 1 ]
+
+}
+
+@test "generate ocsp signing pairs" {
+	run init_from_input_ocsp
+	[ "$status" -eq 0 ]
+	[ -f "/tmp/spki/certs/ca.ocsp.cert.pem" ]
+	[ -f "/tmp/spki/intermediate/certs/intermediate.ocsp.cert.pem" ]
+
+	ROOT_OCSP_CERT=$(openssl x509 -in /tmp/spki/certs/ca.ocsp.cert.pem -noout -text)
+	echo "$ROOT_OCSP_CERT" | grep "Issuer: CN = $ROOT_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$ROOT_OCSP_CERT" | grep "Subject: CN = $ROOT_OCSP_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+
+	INTERMEDIATE_OCSP_CERT=$(openssl x509 -in /tmp/spki/intermediate/certs/intermediate.ocsp.cert.pem -noout -text)
+	echo "$INTERMEDIATE_OCSP_CERT" | grep "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$INTERMEDIATE_OCSP_CERT" | grep "Subject: CN = $INTERMEDIATE_OCSP_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+}
+
+@test "ocsp responder" {
+	skip #can't start the ocsp responder programmaticaly because there's no -passin arg
+	init_from_input_ocsp
+	./spki ocsp-responder 12345 &> /dev/null & <<-EOF
+	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+	EOF
+
+	create client_server test
+	run ./spki ocsp-query http://localhost:12345 test
+	[ "$status" -eq 0 ]
+
+	revoke test
+	kill %%
 }

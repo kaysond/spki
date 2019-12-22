@@ -33,6 +33,8 @@ load_vars() {
 	ROOT_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
 	ROOT_MAIL="$emailAddress"
 
+	ROOT_OCSP_COMMON_NAME="Root CA OCSP"
+
 	INTERMEDIATE_COMMON_NAME="Intermediate CA"
 	INTERMEDIATE_COUNTRY_NAME="$countryName"
 	INTERMEDIATE_PROVINCE_NAME="$stateOrProvinceName"
@@ -40,6 +42,8 @@ load_vars() {
 	INTERMEDIATE_ORGANIZATION_NAME="$organizationName"
 	INTERMEDIATE_ORGANIZATIONAL_UNIT_NAME="$organizationalUnitName"
 	INTERMEDIATE_MAIL="$emailAddress"
+
+	INTERMEDIATE_OCSP_COMMON_NAME="Intermediate CA OCSP"
 
 	CERT_COMMON_NAME="Test Cert"
 
@@ -84,7 +88,7 @@ init_from_input() {
 }
 
 init_from_input_crl() {
-	command -v http-server &> /dev/null
+	command -v http-server
 	http-server /tmp/spki &> /dev/null &
 	export SPKI_ROOT_CRL_DP="URI:http://localhost:8080/crl/ca.crl.der"
 	export SPKI_INTRMDT_CRL_DP="URI:http://localhost:8080/intermediate/crl/intermediate.crl.der"
@@ -119,6 +123,63 @@ init_from_input_crl() {
 	$ANYKEY$ANYKEY
 	EOF
 	kill %%
+}
+
+init_from_input_ocsp() {
+	export SPKI_ROOT_OCSP="URI:http://localhost:12345"
+	export SPKI_INTRMDT_OCSP="URI:http://localhost:12346"
+
+	./spki init <<-EOF
+	$ROOT_COUNTRY_NAME
+	$ROOT_PROVINCE_NAME
+	$ROOT_LOCALITY_NAME
+	$ROOT_ORGANIZATION_NAME
+	$ROOT_ORGANIZATIONAL_UNIT_NAME
+	$ROOT_MAIL
+	$ROOT_PRIVATE_KEY_PASSWORD
+	$ROOT_PRIVATE_KEY_PASSWORD
+	$ROOT_COMMON_NAME
+
+
+
+
+
+	
+	$ANYKEY$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+	$INTERMEDIATE_COMMON_NAME
+	$INTERMEDIATE_COUNTRY_NAME
+	$INTERMEDIATE_PROVINCE_NAME
+	$INTERMEDIATE_LOCALITY_NAME
+	$INTERMEDIATE_ORGANIZATION_NAME
+	$INTERMEDIATE_ORGANIZATIONAL_UNIT_NAME
+	$INTERMEDIATE_MAIL
+	$YES
+	$YES
+	$ANYKEY$ROOT_PRIVATE_KEY_PASSWORD
+	$ROOT_PRIVATE_KEY_PASSWORD
+	$ROOT_OCSP_COMMON_NAME
+
+
+
+
+
+
+	$YES
+	$YES
+	$ANYKEY$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
+	$INTERMEDIATE_OCSP_COMMON_NAME
+
+
+
+
+
+
+	$YES
+	$YES
+	$ANYKEY
+	EOF
 }
 
 init_from_envvars() {
@@ -186,18 +247,10 @@ create_csr() {
 	EOF
 }
 
-sign() {
-	./spki sign $@ <<-EOF
+revoke() {
+	./spki revoke $1 keyCompromise <<-EOF
+	$YES
 	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
-	$YES
-	$YES
 	$ANYKEY
-	EOF
-}
-
-pkcs12() {
-	./spki export-pkcs12 $@ <<-EOF
-	$PRIVATE_KEY_PASSWORD
-	$PRIVATE_KEY_PASSWORD
 	EOF
 }
