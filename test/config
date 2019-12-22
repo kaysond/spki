@@ -1,0 +1,3 @@
+ROOT_DIR=/tmp/spki/
+ROOT_PREFIX='ca_filetest'
+INTRMDT_PREFIX='intermediate_filetest'
