@@ -1,4 +1,6 @@
 # Simple PKI
+[![Build Status](https://travis-ci.com/kaysond/spki.svg?branch=master)](https://travis-ci.com/kaysond/spki)
+
 `spki` is a bash script wrapper for [OpenSSL](https://github.com/openssl/openssl) that generates and manages a simple PKI suitable for small deployments. It supports both CRL's and OCSP.
 
 The wrapper is based on Jamie Nguyen's guide: [OpenSSL Certificate Authority](https://jamielinux.com/docs/openssl-certificate-authority/ )
