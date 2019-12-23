@@ -1,7 +1,9 @@
 language: bash
 dist: bionic
 before_install:
-  - sudo apt-get -y install nodejs openjdk-11-openjdk shellcheck
+  - sudo apt-get update
+  - sudo apt-get -y install aptitude
+  - sudo aptitude -y install nodejs npm openjdk-11-jdk shellcheck
   - sudo npm install -g bats http-server
 install: skip
 script:

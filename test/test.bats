@@ -15,12 +15,15 @@ teardown() {
 
 @test "invoking spki without arguments prints usage" {
 	run ./spki
+	dump_output_on_fail
 	[ "$status" -eq 1 ]
 	[ "${lines[0]}" = "Usage:" ]
 }
 
 @test "init creates a root and intermediate cert with the right DNs" {
 	run init_from_input
+	dump_output_on_fail
+	[ "$status" -eq 0 ]
 
 	ROOTCERT=$(openssl x509 -in /tmp/spki/certs/ca.cert.pem -noout -text)
 	echo "$ROOTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
@@ -34,7 +37,7 @@ teardown() {
 	export SPKI_CONFIG_FILE="test/config"
 	export SPKI_ROOT_PREFIX="test"
 	run init_from_input
-
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f  /tmp/spki/certs/ca_filetest.cert.pem ]
 	[ -f  /tmp/spki/private/ca_filetest.key.pem ]
@@ -44,7 +47,7 @@ teardown() {
 
 @test "conf defaults get set properly from user input" {
 	run init_from_input
-
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 
 	read -d '' CONF_DEFS <<-EOF || true
@@ -84,7 +87,7 @@ teardown() {
 	INTERMEDIATE_MAIL="$SPKI_emailAddress"
 
 	run init_from_envvars
-
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	read -d '' CONF_DEFS <<-EOF || true
 		commonName = Common Name
@@ -109,7 +112,7 @@ teardown() {
 
 @test "create server certificate" {
 	init_from_input
-
+	dump_output_on_fail
 	run create server test
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/private/test.key.pem" ]
@@ -137,6 +140,7 @@ teardown() {
 	init_from_input
 
 	run create user test
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/private/test.key.pem" ]
 	[ -f "/tmp/spki/intermediate/certs/test.cert.pem" ]
@@ -163,6 +167,7 @@ teardown() {
 	init_from_input
 
 	run create client_server test
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/private/test.key.pem" ]
 	[ -f "/tmp/spki/intermediate/certs/test.cert.pem" ]
@@ -186,12 +191,15 @@ teardown() {
 
 @test "verify" {
 	init_from_input
-	run create client_server test
 
-	run echo "$ANYKEY" | ./spki verify test
+	create client_server test
+
+	run ./spki verify test<<<"$ANYKEY"
+	dump_output_on_fail
 	[ "$status" -eq 0 ] # by prefix
 
-	run echo "$ANYKEY" | ./spki verify "/tmp/spki/intermediate/certs/test.cert.pem"
+	run ./spki verify "/tmp/spki/intermediate/certs/test.cert.pem"<<<"$ANYKEY"
+	dump_output_on_fail
 	[ "$status" -eq 0 ] # by filename
 }
 
@@ -206,6 +214,7 @@ teardown() {
 	$YES
 	$ANYKEY
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/certs/test.cert.pem" ]
 }
@@ -218,6 +227,7 @@ teardown() {
 	$PRIVATE_KEY_PASSWORD
 	$PRIVATE_KEY_PASSWORD
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/certs/test.p12" ]
 }
@@ -231,6 +241,7 @@ teardown() {
 	$PRIVATE_KEY_PASSWORD
 	$PRIVATE_KEY_PASSWORD
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/intermediate/certs/test_truststore.p12" ]
 }
@@ -240,6 +251,7 @@ teardown() {
 	create client_server test
 
 	run ./spki list
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	# Bash test + regex avoids whitespace issues
 	[[ "${lines[0]}" =~ "/CN=$CERT_COMMON_NAME/C=$countryName/ST=$stateOrProvinceName/L=$localityName/O=$organizationName/OU=$organizationalUnitName/emailAddress=$emailAddress" ]]
@@ -248,7 +260,9 @@ teardown() {
 }
 
 @test "generate crl" {
+	start-http-server
 	run init_from_input_crl
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/crl/ca.crl.der" ]
 	[ -f "/tmp/spki/intermediate/crl/intermediate.crl.der" ]
@@ -258,6 +272,7 @@ teardown() {
 
 	$ANYKEY
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 
 	run ./spki generate-crl -rootca <<-EOF
@@ -265,12 +280,17 @@ teardown() {
 
 	$ANYKEY
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
+
+	kill-http-server
 }
 
 @test "list-crl" {
+	start-http-server
 	init_from_input_crl
 	run ./spki list-crl
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[[ "${lines[1]}" =~ "Certificate Revocation List (CRL):" ]]
 	[[ "${lines[2]}" =~ "Version 2 (0x1)" ]]
@@ -281,36 +301,43 @@ teardown() {
 	[[ "${lines[17]}" =~ "Version 2 (0x1)" ]]
 	[[ "${lines[18]}" =~ "Signature Algorithm: sha256WithRSAEncryption" ]]
 	[[ "${lines[19]}" =~ "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" ]]
+	kill-http-server
 }
 
 @test "create and revoke cert (crl)" {
+	start-http-server
 	init_from_input_crl
-	http-server /tmp/spki &> /dev/null &
 
 	run create client_server test
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 
 	run revoke test
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 
 	run ./spki verify test <<-EOF
 	$ANYKEY
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 1 ]
 
 	run ./spki list
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[[ "${lines[1]}" =~ "Status: Revoked" ]]
 	[[ "${lines[4]}" =~ "Revocation reason: keyCompromise" ]]
 
 	run ./spki list-crl
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[[ "${lines[29]}" =~ "Serial Number: 1000" ]]
 	[[ "${lines[33]}" =~ "Key Compromise" ]]
-	kill %%
+	kill-http-server
 }
 
 @test "revoke intermediate" {
+	start-http-server
 	init_from_input_crl
 
 	run ./spki revoke-intermediate superseded <<-EOF
@@ -318,9 +345,11 @@ teardown() {
 	$ROOT_PRIVATE_KEY_PASSWORD
 	$ANYKEY
 	EOF
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 
 	run ./spki list-crl
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[[ "${lines[14]}" =~ "Serial Number: 1000" ]]
 	[[ "${lines[18]}" =~ "Superseded" ]]
@@ -328,12 +357,15 @@ teardown() {
 	# this doesn't actually check the CRL DP
 	# since it looks it up in the local database first
 	run ./spki verify-intermediate
+	dump_output_on_fail
 	[ "$status" -eq 1 ]
 
+	kill-http-server
 }
 
 @test "generate ocsp signing pairs" {
 	run init_from_input_ocsp
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	[ -f "/tmp/spki/certs/ca.ocsp.cert.pem" ]
 	[ -f "/tmp/spki/intermediate/certs/intermediate.ocsp.cert.pem" ]
@@ -347,8 +379,8 @@ teardown() {
 	echo "$INTERMEDIATE_OCSP_CERT" | grep "Subject: CN = $INTERMEDIATE_OCSP_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
 }
 
-@test "ocsp responder" {
-	skip #can't start the ocsp responder programmaticaly because there's no -passin arg
+@test "ocsp responder" { #can't start the ocsp responder programmaticaly because there's no -passin arg
+	skip
 	init_from_input_ocsp
 	./spki ocsp-responder 12345 &> /dev/null & <<-EOF
 	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
@@ -356,6 +388,7 @@ teardown() {
 
 	create client_server test
 	run ./spki ocsp-query http://localhost:12345 test
+	dump_output_on_fail
 	[ "$status" -eq 0 ]
 
 	revoke test

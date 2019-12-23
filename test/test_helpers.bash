@@ -88,8 +88,6 @@ init_from_input() {
 }
 
 init_from_input_crl() {
-	command -v http-server
-	http-server /tmp/spki &> /dev/null &
 	export SPKI_ROOT_CRL_DP="URI:http://localhost:8080/crl/ca.crl.der"
 	export SPKI_INTRMDT_CRL_DP="URI:http://localhost:8080/intermediate/crl/intermediate.crl.der"
 
@@ -122,7 +120,6 @@ init_from_input_crl() {
 	$YES
 	$ANYKEY$ANYKEY
 	EOF
-	kill %%
 }
 
 init_from_input_ocsp() {
@@ -253,4 +250,19 @@ revoke() {
 	$INTERMEDIATE_PRIVATE_KEY_PASSWORD
 	$ANYKEY
 	EOF
+}
+
+dump_output_on_fail() {
+	for line in "${lines[@]}"; do echo "$line"; done
+	echo "Status: $status"
+}
+
+start-http-server() {
+	command -v http-server &> /dev/null
+	http-server /tmp/spki &> /dev/null &
+	HTTP_SERVER_PID=$!
+}
+
+kill-http-server() {
+	kill $HTTP_SERVER_PID
 }
