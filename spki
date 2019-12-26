@@ -629,16 +629,17 @@ ocsp-responder() {
 			INDEX="$ROOT_DIR"/index.txt
 			RKEY=$ROOT_OCSP_KEY
 			RCERT=$ROOT_OCSP_CERT
-			PASS=$(get-password 'root OCSP private key' -noverify)
+			#PASS=$(get-password 'root OCSP private key' -noverify)
 		else
 			CA=$CA_CHAIN
 			INDEX=$INTRMDT_DIR/index.txt
 			RKEY=$INTRMDT_OCSP_KEY
 			RCERT=$INTRMDT_OCSP_CERT
-			PASS=$(get-password 'intermediate OCSP private key' -noverify)
+			#PASS=$(get-password 'intermediate OCSP private key' -noverify)
 		fi
-		#exec 3<<<"$PASS"
+		# exec 3<<<"$PASS"
 		# openssl ocsp does not yet support the -passin arg
+		# see: https://github.com/openssl/openssl/issues/10682
 		openssl ocsp -port "$1" -text \
 			-index "$INDEX" \
 			-CA "$CA" \
