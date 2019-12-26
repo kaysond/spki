@@ -1,7 +1,6 @@
 # Some tests require http-server
 # npm install http-server -g
 
-### RREPLACE LITERALS WITH VARIABLES WHERE PSBLE
 load test_helpers
 
 setup() {
@@ -26,11 +25,11 @@ teardown() {
 	[ "$status" -eq 0 ]
 
 	ROOTCERT=$(openssl x509 -in /tmp/spki/certs/ca.cert.pem -noout -text)
-	echo "$ROOTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
-	echo "$ROOTCERT" | grep "Subject: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
+	echo "$ROOTCERT" | grep "Issuer: $ROOT_DN" &> /dev/null
+	echo "$ROOTCERT" | grep "Subject: $ROOT_DN" &> /dev/null
 	INTRMDTCERT=$(openssl x509 -in /tmp/spki/intermediate/certs/intermediate.cert.pem -noout -text)
-	echo "$INTRMDTCERT" | grep "Issuer: CN = Root CA, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
-	echo "$INTRMDTCERT" | grep "Subject: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" &> /dev/null
+	echo "$INTRMDTCERT" | grep "Issuer: $ROOT_DN" &> /dev/null
+	echo "$INTRMDTCERT" | grep "Subject: $INTERMEDIATE_DN" &> /dev/null
 }
 
 @test "init with config file overwrites file and env vars" {
@@ -120,8 +119,8 @@ teardown() {
 
 	# Check for correct DNs
 	CERT=$(openssl x509 -in /tmp/spki/intermediate/certs/test.cert.pem -noout -text)
-	echo "$CERT" | grep "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$CERT" | grep "Subject: CN = Test Cert, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$CERT" | grep "Issuer: $INTERMEDIATE_DN" &> /dev/null
+	echo "$CERT" | grep "Subject: $CERT_DN" &> /dev/null
 
 	# Check for correct extensions
 	read -d '' EXTENSIONS <<-EOF || true
@@ -147,8 +146,8 @@ teardown() {
 
 	# Check for correct DNs
 	CERT=$(openssl x509 -in /tmp/spki/intermediate/certs/test.cert.pem -noout -text)
-	echo "$CERT" | grep "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$CERT" | grep "Subject: CN = Test Cert, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$CERT" | grep "Issuer: $INTERMEDIATE_DN" &> /dev/null
+	echo "$CERT" | grep "Subject: $CERT_DN" &> /dev/null
 
 	# Check for correct extensions
 	read -d '' EXTENSIONS <<-EOF || true
@@ -174,8 +173,8 @@ teardown() {
 
 	# Check for correct DNs
 	CERT=$(openssl x509 -in /tmp/spki/intermediate/certs/test.cert.pem -noout -text)
-	echo "$CERT" | grep "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$CERT" | grep "Subject: CN = Test Cert, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$CERT" | grep "Issuer: $INTERMEDIATE_DN" &> /dev/null
+	echo "$CERT" | grep "Subject: $CERT_DN" &> /dev/null
 
 	# Check for correct extensions
 	read -d '' EXTENSIONS <<-EOF || true
@@ -254,7 +253,7 @@ teardown() {
 	dump_output_on_fail
 	[ "$status" -eq 0 ]
 	# Bash test + regex avoids whitespace issues
-	[[ "${lines[0]}" =~ "/CN=$CERT_COMMON_NAME/C=$countryName/ST=$stateOrProvinceName/L=$localityName/O=$organizationName/OU=$organizationalUnitName/emailAddress=$emailAddress" ]]
+	[[ "${lines[0]}" =~ "/CN=$CERT_COMMON_NAME/C=$INTERMEDIATE_COUNTRY_NAME/ST=$INTERMEDIATE_PROVINCE_NAME/L=$INTERMEDIATE_LOCALITY_NAME/O=$INTERMEDIATE_ORGANIZATION_NAME/OU=$INTERMEDIATE_ORGANIZATIONAL_UNIT_NAME/emailAddress=$INTERMEDIATE_MAIL" ]]
 	[[ "${lines[1]}" =~ "Status: Valid" ]]
 	[[ "${lines[3]}" =~ "Serial: 1000" ]]
 }
@@ -295,12 +294,12 @@ teardown() {
 	[[ "${lines[1]}" =~ "Certificate Revocation List (CRL):" ]]
 	[[ "${lines[2]}" =~ "Version 2 (0x1)" ]]
 	[[ "${lines[3]}" =~ "Signature Algorithm: sha256WithRSAEncryption" ]]
-	[[ "${lines[4]}" =~ "Issuer: CN = $ROOT_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" ]]
+	[[ "${lines[4]}" =~ "Issuer: $ROOT_DN" ]]
 
 	[[ "${lines[16]}" =~ "Certificate Revocation List (CRL):" ]]
 	[[ "${lines[17]}" =~ "Version 2 (0x1)" ]]
 	[[ "${lines[18]}" =~ "Signature Algorithm: sha256WithRSAEncryption" ]]
-	[[ "${lines[19]}" =~ "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com" ]]
+	[[ "${lines[19]}" =~ "Issuer: $INTERMEDIATE_DN" ]]
 	kill-http-server
 }
 
@@ -371,12 +370,12 @@ teardown() {
 	[ -f "/tmp/spki/intermediate/certs/intermediate.ocsp.cert.pem" ]
 
 	ROOT_OCSP_CERT=$(openssl x509 -in /tmp/spki/certs/ca.ocsp.cert.pem -noout -text)
-	echo "$ROOT_OCSP_CERT" | grep "Issuer: CN = $ROOT_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$ROOT_OCSP_CERT" | grep "Subject: CN = $ROOT_OCSP_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$ROOT_OCSP_CERT" | grep "Issuer: $ROOT_DN"
+	echo "$ROOT_OCSP_CERT" | grep "Subject: $ROOT_OCSP_DN"
 
 	INTERMEDIATE_OCSP_CERT=$(openssl x509 -in /tmp/spki/intermediate/certs/intermediate.ocsp.cert.pem -noout -text)
-	echo "$INTERMEDIATE_OCSP_CERT" | grep "Issuer: CN = $INTERMEDIATE_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
-	echo "$INTERMEDIATE_OCSP_CERT" | grep "Subject: CN = $INTERMEDIATE_OCSP_COMMON_NAME, C = PL, ST = Warsaw, L = Warsaw, O = Company Ltd, OU = Developers, emailAddress = mail@company.com"
+	echo "$INTERMEDIATE_OCSP_CERT" | grep "Issuer: $INTERMEDIATE_DN"
+	echo "$INTERMEDIATE_OCSP_CERT" | grep "Subject: $INTERMEDIATE_OCSP_DN"
 }
 
 @test "ocsp responder" { #can't start the ocsp responder programmaticaly because there's no -passin arg
